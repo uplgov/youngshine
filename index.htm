@@ -1,1 +1,468 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ERR</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
+    :root {
+      --bg-primary: #0a0f1a;
+      --bg-secondary: #10161f;
+      --text-primary: #e8edf5;
+      --text-secondary: #9aaebf;
+      --border-color: #1f2a36;
+      --card-bg: #10161f;
+      --card-border: #222c38;
+      --btn-bg: #1e2a3a;
+      --accent: #5f7f9e;
+      --sec-bg: #071220;
+      --sec-border: #1a3a5c;
+      --sec-text: #7aabcc;
+      --sec-icon: #4a8ab0;
+      --quick-card: #0f1c2a;
+      --quick-border: #1e3248;
+    }
+
+    body {
+      font-family: 'Georgia', 'Times New Roman', Times, serif;
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    #securityBanner {
+      background: var(--sec-bg);
+      border-bottom: 1px solid var(--sec-border);
+    }
+
+    #securityFull {
+      overflow: hidden;
+      max-height: 0;
+      opacity: 0;
+      transition: max-height 0.55s cubic-bezier(0.4,0,0.2,1), opacity 0.45s ease, padding 0.45s ease;
+      padding: 0 2rem;
+    }
+
+    #securityFull.open {
+      max-height: 260px;
+      opacity: 1;
+      padding: 14px 2rem;
+    }
+
+    #securityFull-inner {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+    }
+
+    #closeBannerBtn {
+      flex-shrink: 0;
+      margin-top: 2px;
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      background: #cc3333;
+      border: none;
+      cursor: pointer;
+      position: relative;
+      transition: background 0.18s;
+    }
+
+    #closeBannerBtn::before, #closeBannerBtn::after {
+      content: '';
+      position: absolute;
+      width: 7px;
+      height: 1.5px;
+      background: transparent;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(45deg);
+      transition: background 0.18s;
+    }
+
+    #closeBannerBtn::after {
+      transform: translate(-50%, -50%) rotate(-45deg);
+    }
+
+    #closeBannerBtn:hover {
+      background: #888;
+    }
+
+    #closeBannerBtn:hover::before, #closeBannerBtn:hover::after {
+      background: #fff;
+    }
+
+    .security-body {
+      flex: 1;
+    }
+
+    .security-body h3 {
+      font-size: 0.82rem;
+      font-weight: bold;
+      color: var(--sec-text);
+      margin-bottom: 10px;
+      font-family: 'Georgia', serif;
+      letter-spacing: 0.02em;
+    }
+
+    .security-items {
+      display: flex;
+      gap: 2rem;
+      flex-wrap: wrap;
+      align-items: flex-start;
+    }
+
+    .security-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 0.75rem;
+      color: var(--sec-text);
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .security-item img {
+      width: 32px;
+      height: 32px;
+      object-fit: contain;
+      opacity: 0.85;
+      filter: hue-rotate(180deg) brightness(1.2);
+      flex-shrink: 0;
+    }
+
+    .security-item span {
+      opacity: 0.9;
+      line-height: 1.4;
+    }
+
+    #securityCollapsed {
+      padding: 7px 2rem;
+      font-size: 0.72rem;
+      color: var(--sec-text);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: opacity 0.2s;
+      font-family: 'Georgia', serif;
+      letter-spacing: 0.01em;
+    }
+
+    #securityCollapsed:hover {
+      opacity: 0.7;
+    }
+
+    #securityCollapsed::before {
+      content: '›';
+      font-size: 0.9rem;
+      transition: transform 0.2s;
+    }
+
+    #securityCollapsed:hover::before {
+      transform: translateX(2px);
+    }
+
+    .maintenance-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      min-height: 60vh;
+      padding: 3rem 2rem;
+    }
+
+    .hero-word {
+      text-align: center;
+      position: relative;
+      max-width: 100%;
+    }
+
+    .main-word {
+      font-size: 7rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      color: white;
+      text-shadow: 0 0 25px rgba(255,255,255,0.4);
+      margin-bottom: 2rem;
+      word-break: break-word;
+      line-height: 1.2;
+    }
+
+    @media (max-width: 760px) {
+      .main-word {
+        font-size: 3.5rem;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .main-word {
+        font-size: 2.5rem;
+      }
+    }
+
+    .language-ring {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 1.2rem 2rem;
+      max-width: 1000px;
+      margin: 0 auto;
+      position: relative;
+    }
+
+    .lang-item {
+      font-size: 0.9rem;
+      color: rgba(255, 255, 255, 0.55);
+      font-family: 'Georgia', monospace;
+      letter-spacing: 0.02em;
+      transition: color 0.2s, transform 0.15s;
+      white-space: nowrap;
+      cursor: default;
+    }
+
+    .lang-item:hover {
+      color: rgba(255, 255, 255, 0.9);
+      transform: translateY(-2px);
+    }
+
+    @media (max-width: 640px) {
+      .lang-item {
+        font-size: 0.7rem;
+        white-space: nowrap;
+      }
+      .language-ring {
+        gap: 0.8rem 1rem;
+      }
+    }
+
+    .footer-note {
+      text-align: center;
+      padding: 1.8rem;
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      border-top: 1px solid var(--border-color);
+      margin-top: 2rem;
+      letter-spacing: 0.5px;
+    }
+
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.9rem 2rem;
+      border-bottom: 1px solid var(--border-color);
+      background: var(--bg-secondary);
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .home-button {
+      font-size: 1.15rem;
+      font-weight: bold;
+      background: none;
+      border: none;
+      color: var(--text-primary);
+      cursor: pointer;
+      font-family: 'Georgia', serif;
+      letter-spacing: 0.03em;
+      transition: color 0.15s;
+    }
+
+    .home-button:hover {
+      color: var(--accent);
+    }
+
+    .nav-divider {
+      color: var(--text-secondary);
+    }
+
+    .current-location {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 0.6rem;
+      align-items: center;
+    }
+
+    .btn-square {
+      background: var(--btn-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 0.3rem 0.9rem;
+      cursor: pointer;
+      color: var(--text-primary);
+      font-size: 0.82rem;
+      font-family: 'Georgia', serif;
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    .btn-square:hover {
+      border-color: var(--accent);
+      background: var(--card-bg);
+    }
+
+    body.light {
+      --bg-primary: #f4f6f9;
+      --bg-secondary: #ffffff;
+      --text-primary: #1a2634;
+      --text-secondary: #3a4a5e;
+      --border-color: #d0d8e4;
+      --card-bg: #ffffff;
+      --card-border: #dce2ec;
+      --btn-bg: #eef2f7;
+      --sec-bg: #e8f4fd;
+      --sec-border: #b8d8f0;
+      --sec-text: #2a5f80;
+      --quick-card: #f0f6ff;
+      --quick-border: #c8dff0;
+    }
+
+    body.light .security-item img {
+      filter: none;
+      opacity: 0.7;
+    }
+
+    body.light .main-word {
+      color: #1a2634;
+      text-shadow: 0 0 15px rgba(0,0,0,0.1);
+    }
+
+    body.light .lang-item {
+      color: rgba(26,38,52,0.55);
+    }
+
+    body.light .lang-item:hover {
+      color: rgba(26,38,52,0.85);
+    }
+  </style>
+</head>
+<body>
+
+<div id="securityBanner">
+  <div id="securityFull">
+    <div id="securityFull-inner">
+      <button id="closeBannerBtn" title="Close"></button>
+      <div class="security-body">
+        <h3 id="securityTitle">How do you know this website is safe?</h3>
+        <div class="security-items">
+          <div class="security-item">
+            <img src="https://uplgov.github.io/sixside/Government.png" alt="Official domain">
+            <span id="securityDomain">uplgov.github.io is the official and only domain of the UPL Government</span>
+          </div>
+          <div class="security-item">
+            <img src="https://uplgov.github.io/sixside/Lock.png" alt="Secure connection">
+            <span id="securityHttps">The lock icon and https:// in your browser mean your connection is encrypted and secure</span>
+          </div>
+          <div class="security-item">
+            <img src="https://uplgov.github.io/sixside/Rubbishbin.png" alt="No data storage">
+            <span id="securityNoStorage">This portal does not store any data. According to the 2133 "Privacy and Cybersecurity for Government Departments - Version 2" regulation, government portals must visibly indicate when data storage is about to begin.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="securityCollapsed">
+    <span id="securityCollapsedText">Learn why this page is safe</span>
+  </div>
+</div>
+
+<div class="top-bar">
+  <div class="nav-left">
+    <button class="home-button" id="homeBtn">Youngshine</button>
+    <span class="nav-divider">|</span>
+    <span class="current-location" id="currentLocation">Technical Notice</span>
+  </div>
+  <div class="toolbar">
+    <button class="btn-square" id="themeToggleBtn">Dark/Light</button>
+  </div>
+</div>
+
+<div class="maintenance-container">
+  <div class="hero-word">
+    <div class="main-word">Under maintenance</div>
+    <div class="language-ring">
+      <span class="lang-item" data-lang="zh-hans">正在维护</span>
+      <span class="lang-item" data-lang="zh-hant">正在維護</span>
+      <span class="lang-item" data-lang="zh-classical">維護之中</span>
+      <span class="lang-item" data-lang="zh-wenyan">維修之中</span>
+      <span class="lang-item" data-lang="hi">रखरखाव में</span>
+      <span class="lang-item" data-lang="es">En mantenimiento</span>
+      <span class="lang-item" data-lang="mn">Засварт орж байна</span>
+      <span class="lang-item" data-lang="ru">На обслуживании</span>
+      <span class="lang-item" data-lang="pt">Em manutenção</span>
+      <span class="lang-item" data-lang="ko">유지보수 중</span>
+      <span class="lang-item" data-lang="ja">メンテナンス中</span>
+      <span class="lang-item" data-lang="fr">En maintenance</span>
+      <span class="lang-item" data-lang="de">In Wartung</span>
+    </div>
+  </div>
+</div>
+
+<div class="footer-note">
+  <span>ERR · Service temporarily unavailable · Please check back later.</span>
+</div>
+
+<script>
+  (function() {
+    let bannerOpen = false;
+
+    function openBanner() {
+      document.getElementById("securityFull").classList.add("open");
+      document.getElementById("securityCollapsed").style.display = "none";
+      bannerOpen = true;
+    }
+
+    function closeBanner() {
+      document.getElementById("securityFull").classList.remove("open");
+      document.getElementById("securityCollapsed").style.display = "flex";
+      bannerOpen = false;
+    }
+
+    document.getElementById("closeBannerBtn").onclick = function(e) {
+      e.stopPropagation();
+      closeBanner();
+    };
+    document.getElementById("securityCollapsed").onclick = openBanner;
+    document.getElementById("securityCollapsed").style.display = "flex";
+
+    setTimeout(function() {
+      if (!bannerOpen) openBanner();
+    }, 500);
+
+    const toggleBtn = document.getElementById("themeToggleBtn");
+    if (toggleBtn) {
+      toggleBtn.addEventListener("click", function() {
+        document.body.classList.toggle("light");
+      });
+    }
+
+    const homeBtn = document.getElementById("homeBtn");
+    if (homeBtn) {
+      homeBtn.addEventListener("click", function() {
+        window.location.reload();
+      });
+    }
+  })();
+</script>
+</body>
+</html>
