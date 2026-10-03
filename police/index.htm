@@ -1,1 +1,1483 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>Capital Constabulary</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg-primary: #0a0f1a;
+      --bg-secondary: #10161f;
+      --text-primary: #e8edf5;
+      --text-secondary: #9aaebf;
+      --border-color: #1a2538;
+      --card-bg: #10161f;
+      --card-border: #222c38;
+      --btn-bg: #1e2a3a;
+      --accent-red: #cc3333;
+      --accent-green: #2ecc71;
+      --accent-amber: #f39c12;
+      --police-blue: #4a6b8c;
+      --cursor-color: rgba(204, 51, 51, 0.3);
+      --cursor-border: #cc3333;
+    }
+    body.light {
+      --bg-primary: #f4f6f9; --bg-secondary: #ffffff; --text-primary: #1a2634;
+      --text-secondary: #3a4a5e; --border-color: #d0d8e4; --card-bg: #ffffff;
+      --card-border: #dce2ec; --btn-bg: #eef2f7;
+    }
+    body { font-family: 'Georgia', serif; background-color: var(--bg-primary); color: var(--text-primary); transition: background 0.3s; overflow-x: hidden; }
+    
+    #cursor-highlight {
+      position: fixed; pointer-events: none; width: 50px; height: 50px;
+      border: 2px solid var(--cursor-border); background: var(--cursor-color);
+      border-radius: 50%; transform: translate(-50%, -50%); z-index: 10000; display: none;
+    }
+    #cursor-highlight::before, #cursor-highlight::after {
+      content: ''; position: absolute; background: #fff;
+    }
+    #cursor-highlight::before { width: 18px; height: 2px; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+    #cursor-highlight::after { width: 2px; height: 18px; top: 50%; left: 50%; transform: translate(-50%, -50%); }
 
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes dropIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .quick-exit {
+      position: fixed; top: 50%; right: 0; transform: translateY(-50%);
+      background: var(--accent-red); color: #fff; padding: 20px 8px;
+      writing-mode: vertical-rl; text-orientation: mixed; font-weight: bold;
+      cursor: pointer; z-index: 9999; border: 2px solid #fff; border-right: none;
+      border-radius: 8px 0 0 8px; letter-spacing: 2px; transition: 0.2s; font-family: sans-serif;
+    }
+    .quick-exit:hover { background: #a00; padding-right: 15px; }
+
+    .filter-layer { transition: filter 0.2s; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 2rem; }
+
+    .emergency-top-bar { background: #000; color: #fff; border-bottom: 2px solid var(--accent-red); padding: 12px; font-family: monospace; text-align: center; position: sticky; top: 0; z-index: 1100; }
+    .report-btn { background: var(--accent-red); color: white; border: none; padding: 5px 15px; cursor: pointer; animation: alert-flash-slow 2s infinite; font-weight: bold; margin-left: 10px; }
+    @keyframes alert-flash-slow { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+    .emergency-number { color: var(--accent-red); font-weight: bold; }
+    .nonemergency-number { color: var(--accent-amber); font-weight: bold; }
+
+    .top-nav { display: flex; justify-content: space-between; align-items: center; padding: 1rem 2rem; background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); position: sticky; top: 70px; z-index: 1000; }
+    
+    .nav-brand { font-weight: bold; letter-spacing: 1px; color: #ffffff; position: relative; cursor: pointer; }
+    body.light .nav-brand { color: #000000; }
+    
+    .nav-brand span { color: var(--police-blue); cursor: pointer; }
+    .popup-menu { position: absolute; top: 100%; left: 0; margin-top: 8px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; min-width: 180px; z-index: 1001; }
+    .popup-menu-item { padding: 12px 20px; color: var(--text-primary); display: block; cursor: pointer; border-bottom: 1px solid var(--border-color); text-decoration: none; }
+    .popup-menu-item:hover { background: var(--btn-bg); color: var(--accent-red); }
+    
+    .keyword-glow { display: inline-block; background: linear-gradient(120deg, #ffffff, #3b82f6, #60a5fa, #3b82f6, #ffffff); background-size: 300% auto; -webkit-background-clip: text; background-clip: text; color: transparent; animation: keywordShine 2.5s ease-in-out infinite; font-weight: bold; }
+    @keyframes keywordShine { 0% { background-position: 0% center; } 30% { background-position: 100% center; text-shadow: 0 0 10px rgba(59,130,246,0.8); } 100% { background-position: 300% center; } }
+    
+    .acc-icon-btn { background: none; border: none; font-size: 1.5rem; cursor: pointer; filter: grayscale(100%) contrast(1.2); transition: filter 0.2s; }
+    .acc-icon-btn:hover { filter: grayscale(50%) contrast(1); }
+    
+    .lang-switch-btn, .tool-btn, .support-gov-btn { padding:5px 15px; cursor:pointer; margin-left:10px; background: var(--btn-bg); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 3px; transition: all 0.3s ease; position: relative; overflow: hidden; z-index: 1; }
+    .support-gov-btn {
+      transition: color 0.3s, border-color 0.3s, box-shadow 0.3s, background 0.3s;
+      animation: coolToWarm 0.6s forwards;
+    }
+    @keyframes coolToWarm {
+      0% { background: var(--btn-bg); color: var(--text-primary); border-color: var(--border-color); box-shadow: 0 0 0 rgba(255,100,0,0); }
+      100% { background: #ff4500; color: #ffffff; border-color: #ffaa33; box-shadow: 0 0 15px rgba(255,69,0,0.8), 0 0 8px rgba(255,200,0,0.6); }
+    }
+    @keyframes warmToCool {
+      0% { background: #ff4500; color: #ffffff; border-color: #ffaa33; box-shadow: 0 0 15px rgba(255,69,0,0.8); }
+      100% { background: var(--btn-bg); color: var(--text-primary); border-color: var(--border-color); box-shadow: 0 0 0 rgba(0,0,0,0); }
+    }
+    .support-gov-btn.mosaic-active {
+      animation: coolToWarm 0.3s ease forwards;
+    }
+    .support-gov-btn.mosaic-exit {
+      animation: warmToCool 0.5s ease forwards;
+    }
+    .mosaic-wave {
+      position: fixed;
+      pointer-events: none;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 9999;
+      background: repeating-conic-gradient(
+        from 0deg,
+        rgba(255, 69, 0, 0.4) 0deg 10deg,
+        rgba(255, 200, 0, 0.4) 10deg 20deg,
+        rgba(255, 80, 0, 0.4) 20deg 30deg,
+        rgba(255, 160, 0, 0.4) 30deg 40deg
+      );
+      background-size: 40px 40px;
+      mix-blend-mode: overlay;
+      backdrop-filter: blur(12px);
+      mask: radial-gradient(circle at var(--x, 50%) var(--y, 50%), transparent 0%, black 80%);
+      -webkit-mask: radial-gradient(circle at var(--x, 50%) var(--y, 50%), transparent 0%, black 80%);
+      animation: rippleExpand 0.8s cubic-bezier(0.2, 0.9, 0.4, 1.1) forwards;
+    }
+    @keyframes rippleExpand {
+      0% {
+        mask-size: 0% 0%;
+        -webkit-mask-size: 0% 0%;
+        opacity: 0;
+      }
+      20% {
+        opacity: 1;
+      }
+      100% {
+        mask-size: 300% 300%;
+        -webkit-mask-size: 300% 300%;
+        opacity: 0;
+        visibility: hidden;
+      }
+    }
+    
+    .acc-panel { position: absolute; top: 70px; right: 2rem; width: 320px; background: var(--bg-secondary); border: 1px solid var(--border-color); padding: 25px; z-index: 2000; display: none; border-radius: 8px; }
+    .acc-panel.show { display: block; animation: dropIn 0.25s ease-out forwards; }
+
+    .acc-item { margin-bottom: 15px; }
+    .acc-item label { display: block; font-size: 0.8rem; margin-bottom: 6px; color: var(--text-secondary); }
+    .acc-select { width: 100%; padding: 8px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; }
+    .stats-container { display: grid; grid-template-columns: 1fr 1px 1fr; max-width: 800px; margin: -30px auto 50px; background: var(--bg-secondary); border: 1px solid var(--border-color); padding: 30px; border-radius: 12px; }
+    .stat-val { font-size: 2.2rem; font-family: monospace; }
+    .trend-down { display: inline-block; width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-top: 12px solid var(--accent-green); margin-left: 10px; }
+    .trend-down.orange { border-top-color: var(--accent-amber); }
+    
+    .stat-label-container {
+      position: relative;
+      display: inline-block;
+      cursor: help;
+      border-bottom: 1px dashed var(--text-secondary);
+    }
+    .stat-label-container:hover .stat-tooltip {
+      visibility: visible;
+      opacity: 1;
+    }
+    .stat-tooltip {
+      visibility: hidden;
+      opacity: 0;
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      margin-bottom: 10px;
+      padding: 12px 16px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      color: var(--text-primary);
+      font-size: 0.85rem;
+      line-height: 1.5;
+      width: 280px;
+      max-width: 80vw;
+      text-align: left;
+      font-weight: normal;
+      z-index: 100;
+      transition: opacity 0.2s ease, visibility 0.2s ease;
+      pointer-events: none;
+      white-space: normal;
+    }
+    .stat-tooltip::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border-width: 8px;
+      border-style: solid;
+      border-color: var(--bg-secondary) transparent transparent transparent;
+    }
+    .stat-tooltip::before {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border-width: 9px;
+      border-style: solid;
+      border-color: var(--border-color) transparent transparent transparent;
+      margin-top: 1px;
+    }
+
+    .motto-carousel {
+      min-height: 80px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 20px 0 40px;
+      font-style: italic;
+      font-size: 1.2rem;
+      color: var(--police-blue);
+    }
+    .motto-text { text-align: center; font-weight: 500; letter-spacing: 1px; }
+    @keyframes fadeInOut {
+      0% { opacity: 0; transform: translateY(5px); }
+      10% { opacity: 1; transform: translateY(0); }
+      90% { opacity: 1; transform: translateY(0); }
+      100% { opacity: 0; transform: translateY(-5px); }
+    }
+    .fade-motto { animation: fadeInOut 4s ease-in-out forwards; }
+
+    .service-buttons-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin: 40px 0;
+    }
+
+    .service-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-left: 4px solid var(--police-blue);
+      border-radius: 12px;
+      padding: 25px 15px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .service-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--police-blue) 0%, var(--police-blue) 33%, var(--accent-red) 33%, var(--accent-red) 66%, #e8edf5 66%, #e8edf5 100%);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    .service-card::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; bottom: 0;
+      width: 4px;
+      background: linear-gradient(180deg, var(--police-blue), var(--accent-red));
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      border-radius: 12px 0 0 12px;
+    }
+    .service-card:hover {
+      transform: translateY(-6px);
+      border-left-color: var(--accent-red);
+      border-color: var(--police-blue);
+      box-shadow:
+        0 12px 28px rgba(74, 107, 140, 0.45),
+        0 4px 10px rgba(204, 51, 51, 0.25),
+        inset 0 0 0 1px rgba(74, 107, 140, 0.2);
+      background: linear-gradient(160deg, rgba(74,107,140,0.18) 0%, rgba(204,51,51,0.10) 100%);
+    }
+    .service-card:hover::before {
+      opacity: 1;
+    }
+    .service-card:hover::after {
+      opacity: 1;
+    }
+    .service-card h3 {
+      font-size: 1.3rem;
+      color: var(--accent-amber);
+      transition: color 0.3s ease, text-shadow 0.3s ease;
+    }
+    .service-card:hover h3 {
+      color: #ffffff;
+      text-shadow: 0 0 10px rgba(74, 107, 140, 0.9), 0 0 20px rgba(204, 51, 51, 0.4);
+    }
+
+    .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 10001; display: none; overflow-y: auto; padding: 20px; animation: fadeIn 0.25s ease-out; }
+    .report-modal, .lost-modal, .lang-modal, .captcha-modal, .privacy-modal, .license-modal, .time-check-modal { background: var(--bg-secondary); border: 1px solid var(--border-color); max-width: 650px; margin: 0 auto; padding: 30px; border-radius: 12px; animation: dropIn 0.3s ease-out forwards; }
+    
+    .privacy-modal p, .license-modal p { margin-bottom: 15px; line-height: 1.6; color: var(--text-primary); white-space: pre-wrap; }
+    
+    .time-check-content h2 {
+      color: var(--accent-amber);
+      margin-bottom: 8px;
+      font-size: 1.6rem;
+    }
+    .time-check-subtitle {
+      color: var(--text-secondary);
+      margin-bottom: 25px;
+      font-size: 1rem;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 15px;
+    }
+    .time-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px 20px;
+      margin-bottom: 25px;
+    }
+    .time-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 8px 0;
+      border-bottom: 1px dashed var(--border-color);
+    }
+    .time-label {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+    .time-value {
+      font-family: monospace;
+      font-size: 1rem;
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+    .user-time-section {
+      background: rgba(204, 51, 51, 0.1);
+      border: 1px solid var(--accent-red);
+      border-radius: 8px;
+      padding: 15px 20px;
+      margin-bottom: 20px;
+    }
+    .user-time-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+    .user-time-label {
+      color: var(--accent-red);
+      font-weight: bold;
+    }
+    .user-time-value {
+      font-family: monospace;
+      font-size: 1.2rem;
+      color: var(--text-secondary);
+      font-weight: bold;
+    }
+    .warning-text {
+      color: var(--accent-red);
+      text-align: center;
+      margin: 20px 0;
+      font-weight: bold;
+      padding: 10px;
+      background: rgba(204, 51, 51, 0.1);
+      border-radius: 6px;
+    }
+    .time-check-btn {
+      width: 100%;
+      padding: 14px;
+      background: var(--police-blue);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 1.1rem;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .time-check-btn:hover {
+      background: var(--accent-amber);
+      transform: translateY(-2px);
+    }
+    .time-check-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .loading-text {
+      text-align: center;
+      color: var(--accent-amber);
+      margin-top: 15px;
+      font-style: italic;
+    }
+    
+    #map { height: 240px; margin: 15px 0; border: 1px solid var(--border-color); border-radius: 8px; }
+    .btn-action { width: 100%; padding: 12px; margin-top: 12px; cursor: pointer; background: var(--btn-bg); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px; }
+    .btn-danger { background: var(--accent-red); color: white; border: none; }
+    .form-group { margin-bottom: 18px; }
+    .form-group label { display: block; margin-bottom: 6px; font-weight: bold; }
+    input, select, textarea { width: 100%; padding: 10px; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px; }
+    .locate-btn { background: var(--police-blue); margin-bottom: 10px; }
+    .lost-grid { display: flex; flex-direction: column; gap: 16px; margin-top: 20px; }
+    .lost-card { background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; cursor: pointer; transition: 0.2s; }
+    .lost-card:hover { border-color: var(--accent-amber); transform: translateY(-2px); }
+    .lost-header { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; margin-bottom: 8px; }
+    .lost-name { font-size: 1.4rem; font-weight: bold; color: var(--accent-amber); }
+    .lost-date { color: var(--text-secondary); font-size: 0.85rem; }
+    .db-notice { text-align: center; margin-top: 30px; padding: 12px; background: rgba(74,107,140,0.2); border-radius: 8px; font-size: 0.9rem; border: 1px dashed var(--police-blue); }
+    footer { text-align: center; padding: 40px; border-top: 1px solid var(--border-color); margin-top: 40px; }
+    .footer-links-container { display: flex; justify-content: center; gap: 3rem; margin-bottom: 20px; flex-wrap: wrap; }
+    .footer-links-group { display: flex; gap: 1.5rem; }
+    .footer-links-group.related-links .footer-btn { font-weight: 600; }
+    .footer-btn { background: none; border: none; color: var(--police-blue); cursor: pointer; font-size: 0.95rem; text-decoration: underline; padding: 5px 10px; transition: color 0.2s; }
+    .footer-btn:hover { color: var(--accent-red); }
+    
+    #dispatchRoot { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+    .dispatch-card { background: var(--bg-primary); border-left: 4px solid var(--accent-red); padding: 12px 25px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); display: flex; align-items: center; gap: 20px; position: relative; animation: slideUp 0.3s ease; }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    .num-anim-110 { background: linear-gradient(120deg, #cc3333 0%, #cc3333 40%, #3498db 50%, #cc3333 60%, #cc3333 100%); background-size: 200% auto; color: transparent; -webkit-background-clip: text; animation: sweep 1.2s linear infinite; font-size: 1.8rem; font-weight: bold; font-family: monospace; }
+    @keyframes sweep { to { background-position: 200% center; } }
+    .count-tag { position: absolute; bottom: -8px; right: -8px; background: #fff; color: #000; padding: 2px 8px; border-radius: 12px; font-weight: bold; font-size: 0.7rem; border: 2px solid #000; }
+    .queue-msg { font-weight: bold; }
+    
+    .lang-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 20px 0; }
+    .lang-option { background: var(--bg-primary); border: 1px solid var(--border-color); padding: 12px; text-align: center; border-radius: 8px; cursor: pointer; transition: 0.2s; }
+    .lang-option:hover { background: var(--police-blue); transform: translateY(-2px); }
+    
+    .direct-call-hint { background: rgba(204,51,51,0.15); border: 1px solid var(--accent-red); border-radius: 8px; padding: 10px; text-align: center; margin-bottom: 15px; font-weight: bold; color: var(--accent-red); }
+    .error-msg { color: var(--accent-red); font-size: 0.8rem; margin-top: 5px; }
+    
+    .service-btn-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin: 15px 0;
+    }
+    .service-option-btn {
+      padding: 10px 20px;
+      background: var(--btn-bg);
+      border: 2px solid var(--border-color);
+      color: var(--text-primary);
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: all 0.2s ease;
+    }
+    .service-option-btn:hover {
+      transform: translateY(-2px);
+      border-color: var(--accent-amber);
+    }
+    .service-option-btn.selected {
+      background: var(--accent-red);
+      border-color: var(--accent-red);
+      color: white;
+    }
+    
+    .h-captcha {
+      display: flex;
+      justify-content: center;
+      margin: 15px 0;
+    }
+    
+    .toast-notify {
+      position: fixed;
+      bottom: 100px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--accent-green);
+      color: #000;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-weight: bold;
+      z-index: 20000;
+      animation: fadeOut 3s ease-in-out forwards;
+    }
+    .toast-notify.error {
+      background: var(--accent-red);
+      color: white;
+    }
+    @keyframes fadeOut {
+      0% { opacity: 1; transform: translateX(-50%) translateY(0); }
+      70% { opacity: 1; }
+      100% { opacity: 0; transform: translateX(-50%) translateY(-20px); visibility: hidden; }
+    }
+  
+body{--cc-navy:#7da0d6;--cc-brass:#d4aa4f}
+body.light{--cc-navy:#1b3358;--cc-brass:#a87d22}
+.cc-badge{display:inline-grid;place-items:center;width:30px;height:30px;margin-right:8px;border-radius:50% 50% 50% 50%/40% 40% 60% 60%;background:var(--cc-navy);color:var(--bg-secondary);font:700 .8rem Georgia,serif;vertical-align:middle}
+.cc-check{height:14px;background:conic-gradient(var(--cc-navy) 25%,var(--bg-secondary) 0 50%,var(--cc-navy) 0 75%,var(--bg-secondary) 0) 0 0/28px 28px;border-block:1px solid var(--cc-navy)}
+.cc-main{font-family:system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;line-height:1.6}
+.cc-main h1,.cc-main h2,.cc-main h3{font-family:Georgia,"Iowan Old Style",serif}
+.cc-hero{padding-top:4.5rem;padding-bottom:3rem}
+.cc-hero h1{font-size:clamp(2.2rem,6vw,4rem);line-height:1.05;max-width:14ch;margin-bottom:1rem}
+.cc-hero p{color:var(--text-secondary);font-size:1.15rem;max-width:56ch;margin-bottom:1.75rem}
+.cc-actions{display:flex;flex-wrap:wrap;gap:.75rem}
+.cc-btn{display:inline-block;padding:.75rem 1.25rem;border-radius:8px;border:1px solid var(--cc-navy);text-decoration:none;font-weight:600;color:var(--text-primary)}
+.cc-btn.primary{background:var(--cc-navy);color:var(--bg-secondary)}
+.cc-btn:hover{border-color:var(--cc-brass)}
+.cc-main section{padding:2.5rem 0}
+.cc-main section h2{font-size:1.8rem;margin-bottom:.4rem}
+.cc-lede{color:var(--text-secondary);max-width:60ch;margin-bottom:1.5rem}
+.cc-grid{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.cc-card{background:var(--card-bg);border:1px solid var(--card-border);border-left:4px solid var(--cc-brass);border-radius:4px 10px 10px 4px;padding:1.25rem}
+.cc-card h3{margin-bottom:.4rem;font-size:1.1rem}
+.cc-card p{color:var(--text-secondary);font-size:.95rem;margin-bottom:.8rem}
+.cc-card a{font-weight:600;color:var(--text-primary);text-decoration-color:var(--cc-brass);text-underline-offset:3px}
+.cc-news{list-style:none;border-top:1px solid var(--border-color)}
+.cc-news li{display:grid;grid-template-columns:120px 1fr;gap:1rem;padding:1rem 0;border-bottom:1px solid var(--border-color)}
+.cc-news time{color:var(--text-secondary);font-size:.9rem}
+.cc-news b{display:block}
+@media(max-width:520px){.cc-news li{grid-template-columns:1fr;gap:.2rem}}
+.cc-num{font:700 2rem Georgia,serif;margin:.2rem 0}
+.cc-num.red{color:var(--accent-red)}
+</style>
+</head>
+<body>
+<div id="cursor-highlight"></div>
+
+<button class="quick-exit" onclick="quickExit()" id="quickExitBtn">LEAVE THIS PAGE</button>
+
+<div id="dispatchRoot"></div>
+<div class="emergency-top-bar">
+  <span id="emergencyLabel">EMERGENCY:</span> <span class="emergency-number">110</span> <button class="report-btn" id="emergencyBtn">REPORT EMERGENCY</button>
+  <span style="margin:0 20px;">|</span>
+  <span id="nonEmergencyLabel">NON-EMERGENCY:</span> <span class="nonemergency-number">009</span>
+  <div style="font-size:0.75rem; color:#aaa; margin-top:6px;" id="callNote"></div>
+</div>
+<nav class="top-nav">
+  <div class="nav-brand" id="navBrand"><span class="cc-badge" aria-hidden="true">CC</span> CAPITAL CONSTABULARY</div>
+  <div><button class="lang-switch-btn" id="langSwitchBtn">A/文</button><button class="tool-btn" onclick="document.body.classList.toggle('light')">THEME</button><button class="acc-icon-btn" onclick="toggleAccPanel()">♿</button></div>
+  <div class="acc-panel" id="accPanel">
+    <div class="acc-item"><label id="contrastLabel">Contrast</label><input type="range" id="con-range" min="0.5" max="2" step="0.1" value="1" oninput="applyFilters()"></div>
+    <div class="acc-item"><label id="grayscaleLabel">Grayscale</label><input type="range" id="gray-range" min="0" max="1" step="0.1" value="0" oninput="applyFilters()"></div>
+    <div class="acc-item"><label id="saturateLabel">Saturate</label><input type="range" id="sat-range" min="0" max="3" step="0.1" value="1" oninput="applyFilters()"></div>
+    <div class="acc-item"><label id="crosshairLabel">Crosshair Color</label><select id="cursor-color-select" class="acc-select" onchange="updateCursorStyle()"><option value="rgba(204,51,51,0.3)|#cc3333">Red</option><option value="rgba(52,152,219,0.3)|#3498db">Blue</option><option value="rgba(50,205,50,0.3)|#32cd32">Lime</option><option value="rgba(255,255,0,0.3)|#ffff00">Yellow</option></select></div>
+    <div class="acc-item"><label><input type="checkbox" id="cursor-cb" onchange="toggleCursorAssist(this.checked)"> <span id="cursorEnableLabel">Enable Crosshair Assist</span></label></div>
+    <button class="btn-action" id="resetAccBtn" onclick="resetAcc()">Reset</button>
+  </div>
+</nav>
+<div class="cc-check" aria-hidden="true"></div>
+<main class="filter-layer cc-main" id="mainFilter">
+  <div class="container cc-hero"><h1 data-i="0"></h1><p data-i="1"></p>
+    <div class="cc-actions"><a class="cc-btn primary" href="#services" data-i="2"></a><a class="cc-btn" href="#contact" data-i="3"></a></div></div>
+  <section id="services"><div class="container"><h2 data-i="4"></h2><p class="cc-lede" data-i="5"></p><div class="cc-grid"><article class="cc-card"><h3 data-i="6"></h3><p data-i="7"></p><a href="#" data-i="8"></a></article><article class="cc-card"><h3 data-i="9"></h3><p data-i="10"></p><a href="#" data-i="11"></a></article><article class="cc-card"><h3 data-i="12"></h3><p data-i="13"></p><a href="#" data-i="14"></a></article><article class="cc-card"><h3 data-i="15"></h3><p data-i="16"></p><a href="#" data-i="17"></a></article></div></div></section>
+  <section id="areas"><div class="container"><h2 data-i="18"></h2><p class="cc-lede" data-i="19"></p><div class="cc-grid"><article class="cc-card"><h3>Youngshine</h3><p data-i="20"></p><a href="#" data-i="21"></a></article><article class="cc-card"><h3>Woolsey City</h3><p data-i="20"></p><a href="#" data-i="21"></a></article><article class="cc-card"><h3>United Telos</h3><p data-i="20"></p><a href="#" data-i="21"></a></article></div></div></section>
+  <section id="news"><div class="container"><h2 data-i="22"></h2><p class="cc-lede" data-i="23"></p><ul class="cc-news"><li><time datetime="2026-10-01"></time><span><b data-i="24"></b><span data-i="25"></span></span></li><li><time datetime="2026-09-24"></time><span><b data-i="24"></b><span data-i="25"></span></span></li><li><time datetime="2026-09-15"></time><span><b data-i="24"></b><span data-i="25"></span></span></li></ul></div></section>
+  <section id="contact"><div class="container"><h2 data-i="26"></h2><p class="cc-lede" data-i="27"></p><div class="cc-grid">
+    <div class="cc-card"><h3 data-i="28"></h3><div class="cc-num red">110</div><p data-i="29"></p></div>
+    <div class="cc-card"><h3 data-i="30"></h3><div class="cc-num">009</div><p data-i="31"></p></div>
+    <div class="cc-card"><h3 data-i="32"></h3><p data-i="33"></p></div></div></div></section>
+</main>
+<div class="cc-check" aria-hidden="true"></div>
+<footer>
+  <div class="footer-links-container">
+    <div class="footer-links-group legal-group">
+      <button class="footer-btn" id="privacyPolicyBtn">Privacy Policy</button>
+      <button class="footer-btn" id="licenseBtn">License</button>
+    </div>
+  </div>
+  <p id="footerText">© 1945 - 3019 Capital Constabulary, The Great Youngshine, Woolsey City and United Telos · Technical support by Wareflame</p>
+</footer>
+
+<div class="modal-overlay" id="timeCheckModal">
+  <div class="time-check-modal">
+    <div class="time-check-content">
+      <h2 id="timeCheckTitle">你的时间不准</h2>
+      <div class="time-check-subtitle" id="timeCheckSubtitle">您的时钟不准。现在时间是：</div>
+      
+      <div class="time-grid" id="timeGrid">
+        <div class="time-row"><span class="time-label" id="utcTimeLabel">UTC 时间</span><span class="time-value" id="utcTimeValue">--</span></div>
+        <div class="time-row"><span class="time-label" id="localTimeLabel">本地时间</span><span class="time-value" id="localTimeValue">--</span></div>
+        <div class="time-row"><span class="time-label" id="buddhistYearLabel">佛历</span><span class="time-value" id="buddhistYearValue">--</span></div>
+        <div class="time-row"><span class="time-label" id="lunarYearLabel">农历</span><span class="time-value" id="lunarYearValue">--</span></div>
+        <div class="time-row"><span class="time-label" id="unixTimestampLabel">Unix 时间戳</span><span class="time-value" id="unixTimestampValue">--</span></div>
+        <div class="time-row"><span class="time-label" id="julianDayLabel">儒略日 (JD)</span><span class="time-value" id="julianDayValue">--</span></div>
+      </div>
+      
+      <div class="user-time-section">
+        <div class="user-time-row">
+          <span class="user-time-label" id="yourTimeLabel">这是你的时间（错误）：</span>
+          <span class="user-time-value" id="userTimeValue">--</span>
+        </div>
+      </div>
+      
+      <div class="warning-text" id="timeWarning">您的时间不准可能导致某些功能不可用。</div>
+      
+      <button class="time-check-btn" id="continueBtn">继续访问网站</button>
+      <div class="loading-text" id="loadingText" style="display: none;">重新加载连接...</div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="reportModal"><div class="report-modal">
+  <div class="direct-call-hint" id="directCallHint"></div>
+  <h2 id="modalHead">Emergency Report</h2>
+  
+  <div class="form-group">
+    <label id="serviceLabel"></label>
+    <div class="service-btn-group" id="serviceBtnGroup">
+      <button class="service-option-btn" data-service="police" id="servicePoliceBtn">Police</button>
+      <button class="service-option-btn" data-service="rescue" id="serviceRescueBtn">Rescue</button>
+      <button class="service-option-btn" data-service="fire" id="serviceFireBtn">Fire</button>
+      <button class="service-option-btn" data-service="medical" id="serviceMedicalBtn">Medical</button>
+    </div>
+    <div id="serviceWarning" class="error-msg"></div>
+  </div>
+  
+  <div class="form-group"><label id="locationLabel"></label><button class="btn-action locate-btn" id="locateBtn"></button><input type="text" id="latlngInput" placeholder="Latitude, Longitude" readonly style="background:#1e2a3a;"><div id="locationError" class="error-msg"></div></div>
+  <div id="map" style="height:200px;"></div>
+  <div class="form-group"><label id="visibleLabel"></label><div class="checkbox-group" id="visibilityGroup"><label><input type="radio" name="visibility" value="yes"> <span id="optYes"></span></label><label><input type="radio" name="visibility" value="no"> <span id="optNo"></span></label></div></div>
+  <div class="form-group"><label id="contactLabel"></label><input type="text" id="contactInput" placeholder="Phone / Email"></div>
+  <div class="form-group"><label id="commentLabel"></label><textarea id="commentInput" rows="3" placeholder=""></textarea></div>
+  
+  <div class="h-captcha" data-sitekey="f21e8c1a-d6e8-4332-8106-83ac0cc65c54" id="reportCaptcha"></div>
+  <div id="captchaError" class="error-msg" style="text-align:center; margin-top:5px;"></div>
+  
+  <button class="btn-action btn-danger" id="submitSosBtn"></button><button class="btn-action" id="cancelModalBtn"></button>
+</div></div>
+
+<div class="modal-overlay" id="lostDetailModal"><div class="lost-modal"><h2 id="lostDetailTitle"></h2><div id="lostDetailContent" class="detail-content"></div><button class="btn-action" id="closeLostDetail">Close</button></div></div>
+
+<div class="modal-overlay" id="langModal"><div class="lang-modal"><h2 id="langModalTitle">Select Language</h2><div id="langGrid" class="lang-grid"></div><button class="btn-action" id="closeLangModal">Close</button></div></div>
+
+<div class="modal-overlay" id="captchaModal"><div class="captcha-modal">
+  <h2 id="captchaModalTitle">Verification Required</h2>
+  <p id="captchaModalText" style="text-align:center; margin-bottom:20px;">Please complete the verification below to continue.</p>
+  <div class="h-captcha" data-sitekey="f21e8c1a-d6e8-4332-8106-83ac0cc65c54" id="lostCaptcha"></div>
+  <div id="lostCaptchaError" class="error-msg" style="text-align:center; margin-top:10px;"></div>
+  <button class="btn-action" id="confirmCaptchaBtn">Confirm</button>
+  <button class="btn-action" id="cancelCaptchaBtn">Cancel</button>
+</div></div>
+
+<div class="modal-overlay" id="privacyModal"><div class="privacy-modal"><h2 id="privacyModalTitle">Privacy Policy</h2><div id="privacyModalContent" style="max-height: 60vh; overflow-y: auto; white-space: pre-wrap;"></div><button class="btn-action" id="closePrivacyModal">Close</button></div></div>
+
+<div class="modal-overlay" id="licenseModal"><div class="license-modal"><h2 id="licenseModalTitle">License</h2><div id="licenseModalContent" style="max-height: 60vh; overflow-y: auto; white-space: pre-wrap;"></div><button class="btn-action" id="closeLicenseModal">Close</button></div></div>
+
+<script>
+  function quickExit() {
+    window.open('https://www.google.com/search?q=singapore', '_blank');
+    window.location.replace('https://www.google.com/search?q=Shetland');
+  }
+
+  // 多语言格言库 - 所有语言均已适配
+  const mottoes = {
+    en: ["Serving the citizens of Youngshine since 1989.","Courage, Integrity, Service — Our core values.","Protecting with honour, serving with pride.","Your safety is our sacred duty.","Twenty-four seven, three hundred sixty-five — We stand guard.","Where justice meets compassion.","Every call matters, every life counts."],
+    'zh-Hans': ["自1989年以来为Youngshine市民服务。","勇气、正直、服务 — 我们的核心价值观。","以荣誉守护，以自豪服务。","您的安全是我们的神圣职责。","一年365天，一周7天，全天候守护。","正义与同情在此交汇。","每一次求助都重要，每一条生命都珍贵。"],
+    es: ["Sirviendo a los ciudadanos de Youngshine desde 1989.","Coraje, Integridad, Servicio — Nuestros valores fundamentales.","Protegiendo con honor, sirviendo con orgullo.","Su seguridad es nuestro deber sagrado.","Veinticuatro siete, trescientos sesenta y cinco — Vigilamos.","Donde la justicia se encuentra con la compasión.","Cada llamada importa, cada vida cuenta."],
+    de: ["Den Bürgern von Youngshine seit 1989 dienend.","Mut, Integrität, Dienst — Unsere Grundwerte.","Mit Ehre schützen, mit Stolz dienen.","Ihre Sicherheit ist unsere heilige Pflicht.","Vierundzwanzig sieben, dreihundertfünfundsechzig — Wir halten Wache.","Wo Gerechtigkeit auf Mitgefühl trifft.","Jeder Anruf zählt, jedes Leben zählt."],
+    pt: ["Servindo os cidadãos de Youngshine desde 1989.","Coragem, Integridade, Serviço — Nossos valores fundamentais.","Protegendo com honra, servindo com orgulho.","Sua segurança é nosso dever sagrado.","Vinte e quatro sete, trezentos e sessenta e cinco — Nós vigiamos.","Onde a justiça encontra a compaixão.","Cada chamada importa, cada vida conta."],
+    'zh-Hant': ["自1989年以來為Youngshine市民服務。","勇氣、正直、服務 — 我們的核心價值觀。","以榮譽守護，以自豪服務。","您的安全是我們的神聖職責。","一年365天，一週7天，全天候守護。","正義與同情在此交匯。","每一次求助都重要，每一條生命都珍貴。"],
+    fr: ["Servir les citoyens de Youngshine depuis 1989.","Courage, Intégrité, Service — Nos valeurs fondamentales.","Protéger avec honneur, servir avec fierté.","Votre sécurité est notre devoir sacré.","Vingt-quatre sept, trois cent soixante-cinq — Nous montons la garde.","Là où la justice rencontre la compassion.","Chaque appel compte, chaque vie compte."],
+    lzh: ["自一九八九年為Youngshine邑民供職。","勇、正、務 — 吾等之核價。","以榮護，以傲服。","君之安，乃吾等神責。","日夜無休，歲歲守護。","義與慈會於此。","每呼皆重，每命皆貴。"],
+    ru: ["Служа гражданам Youngshine с 1989 года.","Мужество, Честность, Служение — Наши основные ценности.","Защищать с честью, служить с гордостью.","Ваша безопасность — наш священный долг.","Двадцать четыре семь, триста шестьдесят пять — Мы на страже.","Где справедливость встречает сострадание.","Каждый звонок важен, каждая жизнь ценна."],
+    mn: ["1989 оноос хойш Youngshine-ийн иргэдэд үйлчилж байна.","Эр зориг, Шударга байдал, Үйлчилгээ — Бидний үндсэн үнэт зүйлс.","Нэр төртэй хамгаалах, бахархалтай үйлчлэх.","Таны аюулгүй байдал бол бидний ариун үүрэг.","Долоо хоногийн долоон өдөр, жилийн 365 хоног — Бид харуулд зогсоно.","Шударга ёс энэрэлтэй нийлдэг газар.","Дуудлага бүр чухал, амь бүр үнэ цэнэтэй."],
+    ja: ["1989年以来、Youngshineの市民に奉仕しています。","勇気、誠実さ、奉仕 — 私たちの核となる価値観。","名誉を持って守り、誇りを持って奉仕する。","あなたの安全は私たちの神聖な義務です。","年中無休、24時間体制 — 私たちは見守ります。","正義と思いやりが出会う場所。","すべての通報は重要であり、すべての命は貴重です。"],
+    ko: ["1989년부터 Youngshine 시민을 위해 봉사합니다.","용기, 청렴성, 봉사 — 우리의 핵심 가치.","명예롭게 보호하고, 자랑스럽게 봉사합니다.","귀하의 안전은 우리의 신성한 의무입니다.","연중무휴 24시간 — 우리가 지킵니다.","정의와 연민이 만나는 곳.","모든 신고는 중요하며, 모든 생명은 소중합니다."],
+    hi: ["1989 से Youngshine के नागरिकों की सेवा कर रहे हैं।","साहस, अखंडता, सेवा — हमारे मूल मूल्य।","सम्मान के साथ रक्षा करना, गर्व के साथ सेवा करना।","आपकी सुरक्षा हमारा पवित्र कर्तव्य है।","चौबीसों घंटे, साल के 365 दिन — हम पहरा देते हैं।","जहाँ न्याय करुणा से मिलता है।","हर कॉल मायने रखती है, हर जीवन कीमती है।"],
+    'zh-Classical': ["自一九八九年為Youngshine邑民供職。","勇、正、務 — 吾等之核價。","以榮護，以傲服。","君之安，乃吾等神責。","日夜無休，歲歲守護。","義與慈會於此。","每呼皆重，每命皆貴。"]
+  };
+
+  const translations = {
+    en: { 
+      emergencyLabel:'EMERGENCY:', nonEmergencyLabel:'NON-EMERGENCY:', reportEmerg:'REPORT EMERGENCY', 
+      callNote:'110/009 dialling is free, no SIM needed (cellular coverage required) | 110/009 SMS reporting available',
+      justice:'JUSTICE', professionalism:'PROFESSIONALISM', protection:'PROTECTION', 
+      respTime:'2025 AVG RESPONSE TIME', clearRate:'2025 AVG CLEARANCE RATE',
+      respTooltip:'Specifically refers to the average time interval from when the call taker hangs up the emergency call and the dispatcher completes dispatch, to when the first officer arrives at the scene and confirms the location. Its calculation typically includes call handling time and travel time, but excludes on-scene handling time. This metric is a core KPI measuring police mobility and jurisdictional coverage density; lower values indicate stronger emergency response capability.',
+      clearTooltip:'Within a specific statistical period, the percentage average obtained by dividing the number of cases lawfully closed (solved, referred for prosecution, or otherwise disposed) by the total number of cases filed in the same period. Note that this metric does not directly reflect whether crime occurred; it only measures the processing efficiency of reported cases. In the U.S. Uniform Crime Reporting system, clearance is typically achieved by arrest or exceptional means. It is another core KPI for assessing detective effectiveness and public security management quality.',
+      respVal:'17m 04s', clearVal:'98.2%', respTrend:'6s VS 2024', clearTrend:'0.6% lower VS 2024', 
+      footerText:'© 1945 - 3019 Capital Constabulary, The Great Youngshine, Woolsey City and United Telos · Technical support by Wareflame', 
+      modalHead:'Emergency Report', 
+      directCallHint:'For emergencies, please dial 110 directly. No SIM card needed.',
+      serviceLabel:'Select Services (click to select, multiple allowed)',
+      servicePolice:'Police', serviceRescue:'Rescue', serviceFire:'Fire', serviceMedical:'Medical',
+      locationLabel:'Location / Geo-coordinates', 
+      visibleLabel:'Are you in an open/visible area?', optYes:'Yes', optNo:'No', 
+      contactLabel:'Contact (optional)',
+      commentLabel:'Additional Comments', commentPlaceholder:'Please describe your situation in detail...',
+      sosBtn:'IMMEDIATE SOS', cancel:'Cancel', locateBtn:'Get My Location and Pin on Map', 
+      contrast:'Contrast', grayscale:'Grayscale', saturate:'Saturate', crosshair:'Crosshair Color', 
+      enableCursor:'Enable Crosshair Assist', reset:'Reset', langTitle:'Select Language', 
+      emergQueueMsg:'Support en route', selectServiceError:'Please select at least one service', 
+      locationRequiredError:'Please get your location first', 
+      captchaRequiredError:'Please complete the verification',
+      captchaModalTitle:'Verification Required',
+      captchaModalText:'Please complete the verification below to continue.',
+      captchaConfirm:'Confirm',
+      captchaCancel:'Cancel',
+      dbNotice:'UPL National Database | Nationwide synchronized data', lostTitle:'Lost and Found', 
+      btn1:'Report a Crime', btn2:'Tell Us', btn3:'Lost and Found', btn4:'Apply or Register', 
+      btn5:'Request', btn6:'Complaint, Thanks & Suggestion',
+      btn7:'Public Files', btn8:'Join CC', btn9:'To the PD',
+      btn10:'Chief\'s Space',
+      supportGov:'Support Government',
+      timeCheckTitle:'Your Clock is Inaccurate',
+      timeCheckSubtitle:'Your clock is inaccurate. The correct time is:',
+      utcTime:'UTC Time',
+      localTime:'Local Time',
+      buddhistYear:'Buddhist Era (BE)',
+      lunarYear:'Lunar Calendar',
+      unixTimestamp:'Unix Timestamp',
+      julianDay:'Julian Day (JD)',
+      yourTime:'Your device time (incorrect):',
+      timeWarning:'Your inaccurate clock may cause some features to be unavailable.',
+      continueBtn:'Continue to Website',
+      reconnecting:'Reconnecting...',
+      lostEmptyMsg:'Currently no lost items.',  
+      btnMLP:'Motorway & Lane Patrol',
+      privacyPolicy:'Privacy Policy',
+      license:'License',
+      privacyText:'In accordance with the requirements set out in national regulation 2133 "Privacy and Cybersecurity for Government Departments – Version 2" (UPL National Parliament, national law), all government‑affiliated online portals are obliged to provide users with a clear and visible notice whenever any form of data collection or storage is about to take place. This requirement ensures that users are fully informed and able to understand how their information may be handled prior to the commencement of any data processing activities.\n\nThe website uplgov.github.io/youngshine does not store, record, or retain any user data, files, or materials. It operates solely as an informational platform and does not initiate any form of data collection.\n\nHowever, certain subdomains operating under the Youngshine umbrella—such as portals administered by specific departments, including the police department—may implement their own data‑handling mechanisms and may store information as part of their operational functions. As these subdomains are managed independently, their data‑processing practices may vary.',
+      licenseText:'This website and all materials contained herein are protected under a restrictive licence designed to safeguard the integrity of the work. The content may be used solely for non‑commercial purposes, and any such use must include a clear and visible attribution to the original source: uplgov.github.io/youngshine. No part of this website may be modified, adapted, altered, or used to create derivative works. Commercial use is strictly prohibited under all circumstances. Any use beyond the permissions expressly granted requires prior written authorisation from the site owner.',
+      quickExitBtn:'LEAVE THIS PAGE',
+      relatedLinksLabel:'Related Links',
+      youngshineGov:'Youngshine Government',
+      uplCentralGov:'UPL Central Government',
+      policeUPL:'Police UPL',
+      massiveDynamic:'Massive Dynamic'
+    },
+    'zh-Hans': { 
+      emergencyLabel:'紧急情况:', nonEmergencyLabel:'非紧急:', reportEmerg:'报告紧急事件', 
+      callNote:'110/009 拨打无需 SIM 卡且完全免费 (需蜂窝网络覆盖) | 110/009 短信报警可用',
+      justice:'正义', professionalism:'专业精神', protection:'保护', 
+      respTime:'2025年平均响应时间', clearRate:'2025年平均办结率',
+      respTooltip:'具体指从接警员挂断报警电话、调度员完成派单起，至第一名警力抵达现场并确认位置止的时间间隔的平均值。其计算口径通常包含通话处理耗时与路途行驶耗时，但不包含现场处置时间。该指标是衡量警务机动性与辖区管控密度的核心关键绩效指标，数值越低代表应急处突能力越强。',
+      clearTooltip:'在特定统计周期内，警方依法办结（破获、移送起诉或作其他处理）的案件数除以同期立案总数所得的百分比平均值。注意，该指标不直接反映犯罪是否发生，仅衡量已报案件的处理效率。在美国统一犯罪报告体系中，通常以逮捕或例外情形结案作为清除标准。它是评估警局侦查效能与治安管控质量的另一项核心关键绩效指标。',
+      respVal:'17分04秒', clearVal:'98.2%', respTrend:'比2024年快6秒', clearTrend:'比2024年低0.6%', 
+      footerText:'© 1945 - 3019 Capital Constabulary, The Great Youngshine, Woolsey City and United Telos · Technical support by Wareflame', 
+      modalHead:'紧急报告', 
+      directCallHint:'紧急情况请直接拨打110。无需SIM卡。',
+      serviceLabel:'选择支援类型 (点击选择，可多选)',
+      servicePolice:'警察', serviceRescue:'救援', serviceFire:'火警', serviceMedical:'医疗',
+      locationLabel:'位置 / 经纬度', 
+      visibleLabel:'您在户外或警员可见区域吗？', optYes:'是', optNo:'否', 
+      contactLabel:'联系方式 (选填)',
+      commentLabel:'补充说明', commentPlaceholder:'请详细描述您的情况...',
+      sosBtn:'立即求救', cancel:'取消', locateBtn:'获取我的位置并定位', 
+      contrast:'对比度', grayscale:'灰度', saturate:'饱和度', crosshair:'准星颜色', 
+      enableCursor:'启用高亮十字准星', reset:'重置', langTitle:'选择语言', 
+      emergQueueMsg:'支援正在抵达现场', selectServiceError:'请至少选择一种支援类型', 
+      locationRequiredError:'请先获取您的位置', 
+      captchaRequiredError:'请完成人机验证',
+      captchaModalTitle:'验证 required',
+      captchaModalText:'请完成下方验证后继续。',
+      captchaConfirm:'确认',
+      captchaCancel:'取消',
+      dbNotice:'UPL 国家数据库 | 全国数据同步', lostTitle:'失物招领', 
+      btn1:'报告犯罪', btn2:'告诉我们', btn3:'失物招领', btn4:'申请或注册', 
+      btn5:'请求', btn6:'投诉、感谢和建议',
+      btn7:'公开信息', btn8:'加入CC', btn9:'前往警察局',
+      btn10:'警长空间',
+      supportGov:'支持政府',
+      timeCheckTitle:'你的时间不准',
+      timeCheckSubtitle:'您的时钟不准。现在时间是：',
+      utcTime:'UTC 时间',
+      localTime:'本地时间',
+      buddhistYear:'佛历 (BE)',
+      lunarYear:'农历',
+      unixTimestamp:'Unix 时间戳',
+      julianDay:'儒略日 (JD)',
+      yourTime:'这是你的时间（错误）：',
+      timeWarning:'您的时间不准可能导致某些功能不可用。',
+      continueBtn:'继续访问网站',
+      reconnecting:'重新加载连接...',
+      lostEmptyMsg:'目前没有丢失物品。',  
+      btnMLP:'公路和道路骑警',
+      privacyPolicy:'隐私政策',
+      license:'许可证',
+      privacyText:'根据国家法规第2133号《政府部门隐私与网络安全 — 第二版》（UPL国家议会，国家法律）中的要求，所有政府关联的在线门户网站，在即将进行任何形式的数据收集或存储时，均有义务向用户提供清晰且可见的通知。该要求确保用户在开始任何数据处理活动之前能够完全知情并理解其信息可能被如何处理。\n\n网站uplgov.github.io/youngshine 不存储、记录或保留任何用户数据、文件或材料。其仅作为信息平台运作，并且不启动任何形式的数据收集。\n\n然而，在Youngshine体系下运营的某些子域名——例如由特定部门（包括警察部门）管理的门户网站——可能会实施自己的数据处理机制，并可能作为其运营功能的一部分存储信息。由于这些子域名被独立管理，其数据处理实践可能会有所不同。',
+      licenseText:'本网站及其中包含的所有材料均受限制性许可证保护，该许可证旨在保护作品的完整性。网站内容只能用于非商业目的，并且任何此类使用必须明确指向原始来源：uplgov.github.io/youngshine。本网站的任何部分均不得修改、改编、更改或用于制作衍生作品。在任何情况下都严格禁止商业用途。超出明确许可范围的任何使用均需获得网站所有者的事先书面授权。',
+      quickExitBtn:'离开此网页',
+      relatedLinksLabel:'相关链接',
+      youngshineGov:'Youngshine 政府',
+      uplCentralGov:'UPL 中央政府',
+      policeUPL:'UPL 警察',
+      massiveDynamic:'Massive Dynamic'
+    },
+    es: {
+      emergencyLabel:'EMERGENCIA:', nonEmergencyLabel:'NO EMERGENCIA:', reportEmerg:'REPORTAR EMERGENCIA',
+      callNote:'110/009 llamada gratuita, no se necesita SIM (se requiere cobertura celular) | 110/009 informe por SMS disponible',
+      justice:'JUSTICIA', professionalism:'PROFESIONALISMO', protection:'PROTECCION',
+      respTime:'TIEMPO DE RESPUESTA MEDIO 2025', clearRate:'TASA DE RESOLUCION MEDIA 2025',
+      respTooltip:'Específicamente se refiere al intervalo de tiempo promedio desde que el operador cuelga la llamada de emergencia y el despachador completa la asignación, hasta que el primer agente llega al lugar y confirma la ubicación. Su cálculo normalmente incluye el tiempo de gestión de la llamada y el tiempo de desplazamiento, pero excluye el tiempo de intervención en el lugar. Este indicador es un KPI central que mide la movilidad policial y la densidad de cobertura jurisdiccional; valores más bajos indican una mayor capacidad de respuesta ante emergencias.',
+      clearTooltip:'Dentro de un período estadístico específico, el porcentaje promedio obtenido al dividir el número de casos cerrados legalmente (resueltos, remitidos para enjuiciamiento o archivados de otra forma) por el número total de casos registrados en el mismo período. Tenga en cuenta que este indicador no refleja directamente si ocurrió un delito; solo mide la eficiencia en el procesamiento de los casos denunciados. En el sistema Uniform Crime Reporting de EE. UU., el cierre se logra normalmente mediante arresto o medios excepcionales. Es otro KPI central para evaluar la eficacia investigativa y la calidad de la gestión de la seguridad pública.',
+      respVal:'17m 04s', clearVal:'98.2%', respTrend:'6s vs 2024', clearTrend:'0.6% menos vs 2024',
+      footerText:'© 1945 - 3019 Capital Constabulary, The Great Youngshine, Woolsey City and United Telos · Technical support by Wareflame',
+      modalHead:'Reporte de Emergencia',
+      directCallHint:'Para emergencias, marque 110 directamente. No se necesita tarjeta SIM.',
+      serviceLabel:'Seleccione Servicios (haga clic para seleccionar, se permiten multiples)',
+      servicePolice:'Policia', serviceRescue:'Rescate', serviceFire:'Bomberos', serviceMedical:'Medico',
+      locationLabel:'Ubicacion / Coordenadas GPS',
+      visibleLabel:'Esta en un area abierta o visible?', optYes:'Si', optNo:'No',
+      contactLabel:'Contacto (opcional)',
+      commentLabel:'Comentarios Adicionales', commentPlaceholder:'Por favor describa su situacion en detalle...',
+      sosBtn:'SOS INMEDIATO', cancel:'Cancelar', locateBtn:'Obtener mi ubicacion',
+      contrast:'Contraste', grayscale:'Escala de grises', saturate:'Saturacion', crosshair:'Color de mira',
+      enableCursor:'Activar asistencia de mira', reset:'Reiniciar', langTitle:'Seleccionar Idioma',
+      emergQueueMsg:'Apoyo en camino', selectServiceError:'Por favor seleccione al menos un servicio',
+      locationRequiredError:'Por favor obtenga su ubicacion primero',
+      captchaRequiredError:'Por favor complete la verificacion',
+      captchaModalTitle:'Verificacion requerida',
+      captchaModalText:'Por favor complete la verificacion a continuacion para continuar.',
+      captchaConfirm:'Confirmar',
+      captchaCancel:'Cancelar',
+      dbNotice:'Base de datos nacional UPL | Datos sincronizados a nivel nacional', lostTitle:'Objetos Perdidos',
+      btn1:'Reportar un Crimen', btn2:'Diganos', btn3:'Objetos Perdidos', btn4:'Solicitar o Registrar',
+      btn5:'Solicitud', btn6:'Queja, Gracias y Sugerencia',
+      btn7:'Archivos Públicos', btn8:'Juntarse a CC', btn9:'Ir a la Policía',
+      btn10:'Espacio del Jefe',
+      supportGov:'Apoyar Gobierno',
+      timeCheckTitle:'Tu Reloj es Inexacto',
+      timeCheckSubtitle:'Su reloj es inexacto. La hora correcta es:',
+      utcTime:'Hora UTC',
+      localTime:'Hora Local',
+      buddhistYear:'Era Budista (BE)',
+      lunarYear:'Calendario Lunar',
+      unixTimestamp:'Marca de Tiempo Unix',
+      julianDay:'Día Juliano (JD)',
+      yourTime:'Hora de su dispositivo (incorrecta):',
+      timeWarning:'Su reloj inexacto puede causar que algunas funciones no estén disponibles.',
+      continueBtn:'Continuar al Sitio Web',
+      reconnecting:'Reconectando...',
+      lostEmptyMsg:'Actualmente no hay objetos perdidos.',  
+      btnMLP:'Patrulla de Autopistas y Carriles',
+      privacyPolicy:'Política de Privacidad',
+      license:'Licencia',
+      privacyText:'De acuerdo con los requisitos establecidos en la regulación nacional 2133 "Privacidad y Ciberseguridad para Departamentos Gubernamentales – Versión 2" (Parlamento Nacional UPL, ley nacional), todos los portales en línea afiliados al gobierno están obligados a proporcionar a los usuarios un aviso claro y visible siempre que cualquier forma de recopilación o almacenamiento de datos esté a punto de tener lugar. Este requisito garantiza que los usuarios sean totalmente informados y puedan comprender cómo sus información puede ser tratada antes del inicio de cualquier actividad de procesamiento de datos.\n\nEl sitio web uplgov.github.io/youngshine no almacena, registra ni retiene ningún dato, archivo o material del usuario. Opera únicamente como una plataforma informativa y no inicia ninguna forma de recopilación de datos.\n\nSin embargo, ciertos subdominios que operan bajo el paraguas de Youngshine, como los portales administrados por departamentos específicos, incluido el departamento de policía, pueden implementar sus propios mecanismos de manejo de datos y pueden almacenar información como parte de sus funciones operativas. Como estos subdominios se gestionan de forma independiente, sus prácticas de procesamiento de datos pueden variar.',
+      licenseText:'Este sitio web y todos los materiales contenidos en el mismo están protegidos bajo una licencia restrictiva diseñada para salvaguardar la integridad de la obra. El contenido puede ser utilizado únicamente para fines no comerciales, y cualquier uso de este tipo debe incluir una atribución clara y visible a la fuente original: uplgov.github.io/youngshine. Ninguna parte de este sitio web puede ser modificada, adaptada, alterada o utilizada para crear obras derivadas. El uso comercial está estrictamente prohibido bajo todas las circunstancias. Cualquier uso más allá de los permisos expresamente otorgados requiere la autorización previa por escrito del propietario del sitio.',
+      quickExitBtn:'SALIR RÁPIDO',
+      relatedLinksLabel:'Enlaces relacionados',
+      youngshineGov:'Gobierno Youngshine',
+      uplCentralGov:'Gobierno Central UPL',
+      policeUPL:'Policía UPL',
+      massiveDynamic:'Massive Dynamic'
+    },
+    de: { emergencyLabel:'NOTFALL:', nonEmergencyLabel:'KEIN NOTFALL:', reportEmerg:'NOTFALL MELDEN', callNote:'110/009 Kostenloser Anruf, keine SIM-Karte erforderlich (Mobilfunkabdeckung erforderlich) | 110/009 SMS-Meldung verfugbar', justice:'GERECHTIGKEIT', professionalism:'PROFESSIONALITAT', protection:'SCHUTZ', respTime:'DURCHSCHNITTLICHE REAKTIONSZEIT 2025', clearRate:'DURCHSCHNITTLICHE AUFKLARUNGSRATE 2025', respTooltip:'Bezeichnet konkret das durchschnittliche Zeitintervall von dem Moment, in dem der Anrufbeantworter den Notruf auflegt und der Disponent den Einsatz zuweist, bis zum Eintreffen der ersten Einsatzkraft vor Ort und der Bestätigung des Standorts. Die Berechnung umfasst in der Regel die Anrufbearbeitungszeit und die Fahrzeit, jedoch nicht die Einsatzzeit vor Ort. Diese Kennzahl ist ein zentraler KPI zur Messung der polizeilichen Mobilität und der Abdeckungsdichte im Zuständigkeitsbereich; niedrigere Werte bedeuten eine höhere Einsatzfähigkeit.', clearTooltip:'Innerhalb eines bestimmten statistischen Zeitraums der prozentuale Durchschnitt, der sich aus der Division der Anzahl der rechtmäßig abgeschlossenen (aufgeklärten, zur Strafverfolgung übergebenen oder anderweitig erledigten) Fälle durch die Gesamtzahl der im gleichen Zeitraum erfassten Fälle ergibt. Beachten Sie, dass diese Kennzahl nicht direkt widerspiegelt, ob eine Straftat stattgefunden hat; sie misst lediglich die Bearbeitungseffizienz gemeldeter Fälle. Im US-amerikanischen Uniform Crime Reporting-System erfolgt die Aufklärung in der Regel durch Festnahme oder Ausnahmefälle. Es ist ein weiterer zentraler KPI zur Bewertung der Ermittlungseffektivität und der Qualität der öffentlichen Sicherheitsverwaltung.', respVal:'17m 04s', clearVal:'98.2%', respTrend:'6s vs 2024', clearTrend:'0.6% niedriger vs 2024', footerText:'© 1945 - 3019 Capital Constabulary, The Great Youngshine, Woolsey City and United Telos · Technical support by Wareflame', modalHead:'Notfallmeldung', directCallHint:'Bei Notfallen wahlen Sie bitte direkt 110. Keine SIM-Karte erforderlich.', serviceLabel:'Dienste auswahlen (zum Auswahlen klicken, mehrere moglich)', servicePolice:'Polizei', serviceRescue:'Rettung', serviceFire:'Feuerwehr', serviceMedical:'Medizinisch', locationLabel:'Standort / Geo-Koordinaten', visibleLabel:'Befinden Sie sich in einem offenen/sichtbaren Bereich?', optYes:'Ja', optNo:'Nein', contactLabel:'Kontakt (optional)', commentLabel:'Zusatzliche Kommentare', commentPlaceholder:'Bitte beschreiben Sie Ihre Situation im Detail...', sosBtn:'SOFORT SOS', cancel:'Abbrechen', locateBtn:'Meinen Standort abrufen', contrast:'Kontrast', grayscale:'Graustufen', saturate:'Sattigung', crosshair:'Fadenkreuzfarbe', enableCursor:'Fadenkreuz-Assistent aktivieren', reset:'Zurucksetzen', langTitle:'Sprache auswahlen', emergQueueMsg:'Unterstutzung unterwegs', selectServiceError:'Bitte wahlen Sie mindestens einen Dienst aus', locationRequiredError:'Bitte rufen Sie zuerst Ihren Standort ab', captchaRequiredError:'Bitte schlieSSen Sie die Verifizierung ab', captchaModalTitle:'Verifizierung erforderlich', captchaModalText:'Bitte schlieSSen Sie die untenstehende Verifizierung ab, um fortzufahren.', captchaConfirm:'Bestatigen', captchaCancel:'Abbrechen', dbNotice:'UPL Nationale Datenbank | Bundesweit synchronisierte Daten', lostTitle:'Fundburo', btn1:'Straftat melden', btn2:'Teilen Sie uns mit', btn3:'Fundburo', btn4:'Beantragen oder Registrieren', btn5:'Anfrage', btn6:'Beschwerde, Dank und Vorschlag', btn7:'Öffentliche Dateien', btn8:'CC beitreten', btn9:'Zur Polizei', btn10:'Chef Raum', supportGov:'Regierung unterstützen', timeCheckTitle:'Ihre Uhr ist ungenau', timeCheckSubtitle:'Ihre Uhr ist ungenau. Die korrekte Zeit ist:', utcTime:'UTC Zeit', localTime:'Lokale Zeit', buddhistYear:'Buddhistische Zeitrechnung (BE)', lunarYear:'Mondkalender', unixTimestamp:'Unix-Zeitstempel', julianDay:'Julianisches Datum (JD)', yourTime:'Ihre Gerätezeit (falsch):', timeWarning:'Ihre ungenaue Uhr kann dazu führen, dass einige Funktionen nicht verfügbar sind.', continueBtn:'Zur Website fortfahren', reconnecting:'Verbindung wird wiederhergestellt...', lostEmptyMsg:'Derzeit keine verlorenen Gegenstände.', btnMLP:'Autobahn- und Fahrspurstreife', privacyPolicy:'Datenschutzrichtlinie', license:'Lizenz', privacyText:'Gemäß den Anforderungen der nationalen Verordnung 2133 „Datenschutz und Cybersicherheit für Regierungsstellen – Version 2“ (UPL Nationalparlament, nationales Recht) sind alle regierungsnahen Online-Portale verpflichtet, den Benutzern einen klaren und sichtbaren Hinweis zu geben, wenn eine Form der Datenerhebung oder -speicherung stattfinden soll. Diese Anforderung stellt sicher, dass die Benutzer vollständig informiert sind und verstehen können, wie ihre Informationen vor Beginn von Datenverarbeitungsaktivitäten behandelt werden können.\n\nDie Website uplgov.github.io/youngshine speichert, protokolliert oder behält keine Benutzerdaten, Dateien oder Materialien. Sie fungiert ausschließlich als Informationsplattform und leitet keine Form der Datenerhebung ein.\n\nBestimmte Subdomains, die unter dem Dach von Youngshine betrieben werden, wie z. B. Portale, die von bestimmten Abteilungen, einschließlich der Polizeibehörde, verwaltet werden, können jedoch eigene Datenverarbeitungsmechanismen implementieren und Informationen im Rahmen ihrer operativen Funktionen speichern. Da diese Subdomains unabhängig verwaltet werden, können ihre Datenverarbeitungspraktiken variieren.', licenseText:'Diese Website und alle darin enthaltenen Materialien sind durch eine restriktive Lizenz geschützt, die die Integrität des Werks schützen soll. Der Inhalt darf nur für nichtkommerzielle Zwecke verwendet werden, und jede solche Verwendung muss eine klare und sichtbare Zuordnung zur Originalquelle uplgov.github.io/youngshine enthalten. Es ist nicht gestattet, Teile dieser Website zu modifizieren, anzupassen, zu verändern oder zur Erstellung abgeleiteter Werke zu verwenden. Die kommerzielle Nutzung ist unter allen Umständen strengstens untersagt. Jede Nutzung, die über die ausdrücklich erteilten Genehmigungen hinausgeht, bedarf der vorherigen schriftlichen Genehmigung des Seiteninhabers.', quickExitBtn:'SEITE VERLASSEN', relatedLinksLabel:'Verwandte Links', youngshineGov:'Youngshine Regierung', uplCentralGov:'UPL Zentralregierung', policeUPL:'Polizei UPL', massiveDynamic:'Massive Dynamic' },
+    pt: { emergencyLabel:'EMERGENCIA:', nonEmergencyLabel:'NAO EMERGENCIA:', reportEmerg:'REPORTAR EMERGENCIA', callNote:'110/009 chamada gratuita, nao precisa de SIM (cobertura celular necessaria) | 110/009 relatorio por SMS disponivel', justice:'JUSTICA', professionalism:'PROFISSIONALISMO', protection:'PROTECAO', respTime:'TEMPO MEDIO DE RESPOSTA 2025', clearRate:'TAXA MEDIA DE RESOLUCAO 2025', respTooltip:'Refere-se especificamente ao intervalo de tempo médio desde que o operador desliga a chamada de emergência e o despachante conclui a atribuição, até que o primeiro agente chega ao local e confirma a localização. O seu cálculo normalmente inclui o tempo de atendimento da chamada e o tempo de deslocação, mas exclui o tempo de intervenção no local. Este indicador é um KPI central que mede a mobilidade policial e a densidade de cobertura jurisdicional; valores mais baixos indicam maior capacidade de resposta a emergências.', clearTooltip:'Dentro de um período estatístico específico, a percentagem média obtida dividindo o número de casos legalmente encerrados (resolvidos, remetidos para acusação ou de outra forma arquivados) pelo número total de casos registados no mesmo período. Note que este indicador não reflete diretamente se ocorreu um crime; apenas mede a eficiência de processamento dos casos denunciados. No sistema Uniform Crime Reporting dos EUA, o encerramento é normalmente alcançado por detenção ou meios excecionais. É outro KPI central para avaliar a eficácia da investigação e a qualidade da gestão da segurança pública.', respVal:'17m 04s', clearVal:'98.2%', respTrend:'6s vs 2024', clearTrend:'0.6% menor vs 2024', footerText:'© 1945 - 3019 Capital Constabulary, The Great Youngshine, Woolsey City and United Telos · Technical support by Wareflame', modalHead:'Relatorio de Emergencia', directCallHint:'Para emergencias, disque 110 diretamente. Nao e necessario cartao SIM.', serviceLabel:'Selecione Servicos (clique para selecionar, multiplos permitidos)', servicePolice:'Policia', serviceRescue:'Resgate', serviceFire:'Bombeiros', serviceMedical:'Medico', locationLabel:'Localizacao / Coordenadas GPS', visibleLabel:'Voce esta em uma area aberta/visivel?', optYes:'Sim', optNo:'Nao', contactLabel:'Contato (opcional)', commentLabel:'Comentarios Adicionais', commentPlaceholder:'Por favor, descreva sua situacao em detalhes...', sosBtn:'SOS IMEDIATO', cancel:'Cancelar', locateBtn:'Obter minha localizacao', contrast:'Contraste', grayscale:'Escala de cinza', saturate:'Saturacao', crosshair:'Cor da mira', enableCursor:'Ativar assistencia de mira', reset:'Redefinir', langTitle:'Selecionar Idioma', emergQueueMsg:'Suporte a caminho', selectServiceError:'Por favor, selecione pelo menos um servico', locationRequiredError:'Por favor, obtenha sua localizacao primeiro', captchaRequiredError:'Por favor, complete a verificacao', captchaModalTitle:'Verificacao necessaria', captchaModalText:'Por favor, complete a verificacao abaixo para continuar.', captchaConfirm:'Confirmar', captchaCancel:'Cancelar', dbNotice:'Banco de dados nacional UPL | Dados sincronizados em todo o pais', lostTitle:'Achados e Perdidos', btn1:'Reportar Crime', btn2:'Conte-nos', btn3:'Objetos Perdidos', btn4:'Solicitar ou Registrar', btn5:'Solicitacao', btn6:'Reclamacao, Agradecimento e Sugestao', btn7:'Arquivos Públicos', btn8:'Juntar-se à CC', btn9:'Para a Polícia', btn10:'Espaço do Chefe', supportGov:'Apoiar Governo', timeCheckTitle:'Seu Relógio Está Inexato', timeCheckSubtitle:'Seu relógio está inexato. A hora correta é:', utcTime:'Hora UTC', localTime:'Hora Local', buddhistYear:'Era Budista (BE)', lunarYear:'Calendário Lunar', unixTimestamp:'Timestamp Unix', julianDay:'Dia Juliano (JD)', yourTime:'Hora do seu dispositivo (incorreta):', timeWarning:'Seu relógio inexato pode fazer com que algumas funções não estejam disponíveis.', continueBtn:'Continuar para o Site', reconnecting:'Reconectando...', lostEmptyMsg:'Atualmente não há itens perdidos.', btnMLP:'Patrulha de Autoestradas e Vias', privacyPolicy:'Política de Privacidade', license:'Licença', privacyText:'De acordo com os requisitos estabelecidos no regulamento nacional 2133 "Privacidade e Cibersegurança para Departamentos Governamentais – Versão 2" (Parlamento Nacional da UPL, lei nacional), todos os portais online afiliados ao governo são obrigados a fornecer aos utilizadores um aviso claro e visível sempre que qualquer forma de recolha ou armazenamento de dados estiver prestes a ocorrer. Este requisito garante que os utilizadores sejam totalmente informados e possam compreender como as suas informações podem ser tratadas antes do início de quaisquer atividades de processamento de dados.\n\nO site uplgov.github.io/youngshine não armazena, regista ou retém quaisquer dados, ficheiros ou materiais do utilizador. Opera exclusivamente como uma plataforma informativa e não inicia qualquer forma de recolha de dados.\n\nNo entanto, certos subdomínios que operam sob o guarda-chuva da Youngshine, como portais administrados por departamentos específicos, incluindo o departamento de polícia, podem implementar os seus próprios mecanismos de tratamento de dados e podem armazenar informações como parte das suas funções operacionais. Como estes subdomínios são geridos de forma independente, as suas práticas de processamento de dados podem variar.', licenseText:'Este site e todos os materiais aqui contidos estão protegidos sob uma licença restritiva concebida para salvaguardar a integridade do trabalho. O conteúdo pode ser utilizado apenas para fins não comerciais, e qualquer utilização desse tipo deve incluir uma atribuição clara e visível à fonte original: uplgov.github.io/youngshine. Nenhuma parte deste site pode ser modificada, adaptada, alterada ou utilizada para criar obras derivadas. A utilização comercial é estritamente proibida em todas as circunstâncias. Qualquer utilização para além das permissões expressamente concedidas requer autorização prévia por escrito do proprietário do site.', quickExitBtn:'SAIR RÁPIDO', relatedLinksLabel:'Links Relacionados', youngshineGov:'Governo Youngshine', uplCentralGov:'Governo Central UPL', policeUPL:'Polícia UPL', massiveDynamic:'Massive Dynamic' },
+    'zh-Hant': { emergencyLabel:'緊急情況:', nonEmergencyLabel:'非緊急:', reportEmerg:'報告緊急事件', callNote:'110/009 撥打無需 SIM 卡且完全免費 (需蜂窩網絡覆蓋) | 110/009 短信報警可用', justice:'正義', professionalism:'專業精神', protection:'保護', respTime:'2025年平均響應時間', clearRate:'2025年平均辦結率', respTooltip:'具體指從接警員掛斷報警電話、調度員完成派單起，至第一名警力抵達現場並確認位置止的時間間隔的平均值。其計算口徑通常包含通話處理耗時與路途行駛耗時，但不包含現場處置時間。該指標是衡量警務機動性與轄區管控密度的核心關鍵績效指標，數值越低代表應急處突能力越強。', clearTooltip:'在特定統計週期內，警方依法辦結（破獲、移送起訴或作其他處理）的案件數除以同期立案總數所得的百分比平均值。注意，該指標不直接反映犯罪是否發生，僅衡量已報案件的處理效率。在美國統一犯罪報告體系中，通常以逮捕或例外情形結案作為清除標準。它是評估警局偵查效能與治安管控質量的另一項核心關鍵績效指標。', respVal:'17分04秒', clearVal:'98.2%', respTrend:'比2024年快6秒', clearTrend:'比2024年低0.6%', footerText:'© 1945 - 3019 Capital Constabulary, The Great Youngshine, Woolsey City and United Telos · Technical support by Wareflame', modalHead:'緊急報告', directCallHint:'緊急情況請直接撥打110。無需SIM卡。', serviceLabel:'選擇支援類型 (點擊選擇，可多選)', servicePolice:'警察', serviceRescue:'救援', serviceFire:'火警', serviceMedical:'醫療', locationLabel:'位置 / 經緯度', visibleLabel:'您在戶外或警員可見區域嗎？', optYes:'是', optNo:'否', contactLabel:'聯繫方式 (選填)', commentLabel:'補充說明', commentPlaceholder:'請詳細描述您的情況...', sosBtn:'立即求救', cancel:'取消', locateBtn:'獲取我的位置並定位', contrast:'對比度', grayscale:'灰度', saturate:'飽和度', crosshair:'準星顏色', enableCursor:'啟用高亮十字準星', reset:'重置', langTitle:'選擇語言', emergQueueMsg:'支援正在抵達現場', selectServiceError:'請至少選擇一種支援類型', locationRequiredError:'請先獲取您的位置', captchaRequiredError:'請完成人機驗證', captchaModalTitle:'驗證 required', captchaModalText:'請完成下方驗證後繼續。', captchaConfirm:'確認', captchaCancel:'取消', dbNotice:'UPL 國家數據庫 | 全國數據同步', lostTitle:'失物招領', btn1:'報告犯罪', btn2:'告訴我們', btn3:'失物招領', btn4:'申請或註冊', btn5:'請求', btn6:'投訴、感謝和建議', btn7:'公開信息', btn8:'加入CC', btn9:'前往警察局', btn10:'警長空間', supportGov:'支持政府', timeCheckTitle:'你的時間不準', timeCheckSubtitle:'您的時鐘不準。現在時間是：', utcTime:'UTC 時間', localTime:'本地時間', buddhistYear:'佛曆 (BE)', lunarYear:'農曆', unixTimestamp:'Unix 時間戳', julianDay:'儒略日 (JD)', yourTime:'這是你的時間（錯誤）：', timeWarning:'您的時間不準可能導致某些功能不可用。', continueBtn:'繼續訪問網站', reconnecting:'重新加載連接...', lostEmptyMsg:'目前沒有丟失物品。', btnMLP:'公路和道路騎警', privacyPolicy:'隱私政策', license:'許可證', privacyText:'根據國家法規第2133號《政府部門隱私與網絡安全 — 第二版》（UPL國家議會，國家法律）中的要求，所有政府關聯的在線門戶網站，在即將進行任何形式的數據收集或存儲時，均有義務向用戶提供清晰且可見的通知。該要求確保用戶在開始任何數據處理活動之前能夠完全知情並理解其信息可能被如何處理。\n\n網站uplgov.github.io/youngshine 不存儲、記錄或保留任何用戶數據、文件或材料。其僅作為信息平台運作，並且不啟動任何形式的數據收集。\n\n然而，在Youngshine體系下運營的某些子域名——例如由特定部門（包括警察部門）管理的門戶網站——可能會實施自己的數據處理機制，並可能作為其運營功能的一部分存儲信息。由於這些子域名被獨立管理，其數據處理實踐可能會有所不同。', licenseText:'本網站及其中包含的所有材料均受限制性許可證保護，該許可證旨在保護作品的完整性。網站內容只能用於非商業目的，並且任何此類使用必須明確指向原始來源：uplgov.github.io/youngshine。本網站的任何部分均不得修改、改編、更改或用於製作衍生作品。在任何情況下都嚴格禁止商業用途。超出明確許可範圍的任何使用均需獲得網站所有者的事先書面授權。', quickExitBtn:'離開此網頁', relatedLinksLabel:'相關鏈接', youngshineGov:'Youngshine 政府', uplCentralGov:'UPL 中央政府', policeUPL:'UPL 警察', massiveDynamic:'Massive Dynamic' },
+    fr: { emergencyLabel:'URGENCE:', nonEmergencyLabel:'NON URGENCE:', reportEmerg:'SIGNALER UNE URGENCE', callNote:'110/009 appel gratuit, aucune carte SIM requise (couverture cellulaire requise) | 110/009 signalement par SMS disponible', justice:'JUSTICE', professionalism:'PROFESSIONNALISME', protection:'PROTECTION', respTime:'TEMPS DE REPONSE MOYEN 2025', clearRate:'TAUX DE RESOLUTION MOYEN 2025', respTooltip:'Désigne spécifiquement l\'intervalle de temps moyen entre le moment où l\'opérateur raccroche l\'appel d\'urgence et où le répartateur termine l\'affectation, et l\'arrivée du premier agent sur les lieux et la confirmation de l\'emplacement. Son calcul inclut généralement le temps de traitement de l\'appel et le temps de trajet, mais exclut le temps d\'intervention sur place. Cet indicateur est un KPI central mesurant la mobilité policière et la densité de couverture juridictionnelle ; des valeurs plus faibles indiquent une capacité de réponse aux urgences plus forte.', clearTooltip:'Dans une période statistique donnée, le pourcentage moyen obtenu en divisant le nombre d\'affaires légalement classées (résolues, transmises pour poursuites ou autrement traitées) par le nombre total d\'affaires enregistrées sur la même période. Notez que cet indicateur ne reflète pas directement si un crime a eu lieu ; il mesure uniquement l\'efficacité du traitement des affaires signalées. Dans le système Uniform Crime Reporting américain, le classement est généralement obtenu par arrestation ou moyens exceptionnels. C\'est un autre KPI central pour évaluer l\'efficacité des enquêtes et la qualité de la gestion de la sécurité publique.', respVal:'17m 04s', clearVal:'98.2%', respTrend:'6s vs 2024', clearTrend:'0.6% plus bas vs 2024', footerText:'© 1945 - 3019 Capital Constabulary, The Great Youngshine, Woolsey City and United Telos · Technical support by Wareflame', modalHead:'Rapport d\'Urgence', directCallHint:'Pour les urgences, composez le 110 directement. Aucune carte SIM requise.', serviceLabel:'Selectionner les services (cliquer pour selectionner, multiples autorises)', servicePolice:'Police', serviceRescue:'Secours', serviceFire:'Pompiers', serviceMedical:'Medical', locationLabel:'Emplacement / Coordonnees GPS', visibleLabel:'Etes-vous dans une zone ouverte/visible?', optYes:'Oui', optNo:'Non', contactLabel:'Contact (optionnel)', commentLabel:'Commentaires Supplementaires', commentPlaceholder:'Veuillez decrire votre situation en detail...', sosBtn:'SOS IMMEDIAT', cancel:'Annuler', locateBtn:'Obtenir ma position', contrast:'Contraste', grayscale:'Niveaux de gris', saturate:'Saturation', crosshair:'Couleur du viseur', enableCursor:'Activer l\'assistance viseur', reset:'Reinitialiser', langTitle:'Choisir la langue', emergQueueMsg:'Soutien en route', selectServiceError:'Veuillez selectionner au moins un service', locationRequiredError:'Veuillez d\'abord obtenir votre position', captchaRequiredError:'Veuillez completer la verification', captchaModalTitle:'Verification requise', captchaModalText:'Veuillez completer la verification ci-dessous pour continuer.', captchaConfirm:'Confirmer', captchaCancel:'Annuler', dbNotice:'Base de donnees nationale UPL | Donnees synchronisees a l\'echelle nationale', lostTitle:'Objets Perdus', btn1:'Signaler un Crime', btn2:'Dites-nous', btn3:'Objets Perdus', btn4:'Demander ou Enregistrer', btn5:'Demande', btn6:'Plainte, Remerciement et Suggestion', btn7:'Fichiers Publics', btn8:'Rejoindre CC', btn9:'Vers la Police', btn10:'Espace du Chef', supportGov:'Soutenir Gouvernement', timeCheckTitle:'Votre Horloge est Inexacte', timeCheckSubtitle:'Votre horloge est inexacte. L\'heure correcte est :', utcTime:'Heure UTC', localTime:'Heure Locale', buddhistYear:'Ère Bouddhiste (BE)', lunarYear:'Calendrier Lunaire', unixTimestamp:'Horodatage Unix', julianDay:'Jour Julien (JD)', yourTime:'Heure de votre appareil (incorrecte) :', timeWarning:'Votre horloge inexacte peut rendre certaines fonctions indisponibles.', continueBtn:'Continuer vers le Site', reconnecting:'Reconnexion...', lostEmptyMsg:'Actuellement aucun objet perdu.', btnMLP:'Patrouille d\'Autoroute et de Voie', privacyPolicy:'Politique de Confidentialite', license:'Licence', privacyText:'Conformément aux exigences énoncées dans le règlement national 2133 « Confidentialite et Cybersecurite pour les Departements Gouvernementaux – Version 2 » (Parlement national de l\'UPL, loi nationale), tous les portails en ligne affiliés au gouvernement sont tenus de fournir aux utilisateurs un avis clair et visible chaque fois qu\'une forme quelconque de collecte ou de stockage de données est sur le point d\'avoir lieu. Cette exigence garantit que les utilisateurs sont pleinement informés et capables de comprendre comment leurs informations peuvent être traitées avant le début de toute activité de traitement de données.\n\nLe site web uplgov.github.io/youngshine ne stocke, n\'enregistre ni ne conserve aucune donnée, fichier ou matériel utilisateur. Il fonctionne uniquement comme une plateforme d\'information et n\'initie aucune forme de collecte de données.\n\nCependant, certains sous-domaines fonctionnant sous l\'égide de Youngshine, tels que les portails administrés par des départements spécifiques, y compris le département de police, peuvent mettre en œuvre leurs propres mécanismes de traitement des données et peuvent stocker des informations dans le cadre de leurs fonctions opérationnelles. Comme ces sous-domaines sont gérés indépendamment, leurs pratiques de traitement des données peuvent varier.', licenseText:'Ce site web et tous les matériaux qu\'il contient sont protégés par une licence restrictive conçue pour préserver l\'intégrité de l\'œuvre. Le contenu ne peut être utilisé qu\'à des fins non commerciales, et toute utilisation de ce type doit inclure une attribution claire et visible à la source originale : uplgov.github.io/youngshine. Aucune partie de ce site web ne peut être modifiée, adaptée, altérée ou utilisée pour créer des œuvres dérivées. L\'utilisation commerciale est strictement interdite en toutes circonstances. Toute utilisation au-delà des autorisations expressément accordées nécessite une autorisation écrite préalable du propriétaire du site.', quickExitBtn:'QUITTER VITE', relatedLinksLabel:'Liens connexes', youngshineGov:'Gouvernement Youngshine', uplCentralGov:'Gouvernement central UPL', policeUPL:'Police UPL', massiveDynamic:'Massive Dynamic' },
+    lzh: { emergencyLabel:'警急:', nonEmergencyLabel:'常事:', reportEmerg:'報警急', callNote:'110/009 撥打免費，無需SIM卡 (需蜂窩覆蓋) | 110/009 短信報警可用', justice:'義', professionalism:'專', protection:'護', respTime:'乙巳年均應時', clearRate:'乙巳年均結率', respTooltip:'自接警者掛電、調度者派單始，至首警至現場確位止之時均也。其算含通話費時與道途費時，不含現場處置時。此乃衡警機動與轄區密佈之要績，數愈微則應急之能愈強。', clearTooltip:'特定期內，警依法結（破、移訴或他處）之案數，除以同期立案總數之百分均也。當知，此數不直示罪之生否，惟衡報案之處理效耳。在美統罪報系中，常以逮或例外結為清準。此乃評警偵效與治安質之又一要績也。', respVal:'十七分四秒', clearVal:'九八二厘', respTrend:'快六秒比甲辰', clearTrend:'低六毫比甲辰', footerText:'© 1945 - 3019 Capital Constabulary, The Great Youngshine, Woolsey City and United Telos · Technical support by Wareflame', modalHead:'急報', directCallHint:'警急直撥110。毋需SIM卡。', serviceLabel:'擇援類 (點選，可多擇)', servicePolice:'警', serviceRescue:'救', serviceFire:'火', serviceMedical:'醫', locationLabel:'所在 / 經緯', visibleLabel:'君在曠野或可見處否？', optYes:'然', optNo:'否', contactLabel:'繫方 (選填)', commentLabel:'附言', commentPlaceholder:'詳述君之情狀...', sosBtn:'急求', cancel:'止', locateBtn:'取吾所在並定址', contrast:'對比', grayscale:'灰度', saturate:'飽和', crosshair:'準星色', enableCursor:'啟準星輔', reset:'復原', langTitle:'擇語', emergQueueMsg:'援至途中', selectServiceError:'請至少擇一援類', locationRequiredError:'請先取君所在', captchaRequiredError:'請完人機驗證', captchaModalTitle:'驗證 required', captchaModalText:'請完成下方驗證後繼續。', captchaConfirm:'確認', captchaCancel:'取消', dbNotice:'UPL國庫 | 全國同數', lostTitle:'失物', btn1:'報罪', btn2:'告吾', btn3:'失物', btn4:'請或註', btn5:'求', btn6:'訴、謝、議', btn7:'公開文牘', btn8:'入CC', btn9:'赴警署', btn10:'警長之室', supportGov:'輔政', timeCheckTitle:'君之時不準', timeCheckSubtitle:'君之時鐘不準。今時為：', utcTime:'UTC 時', localTime:'本地時', buddhistYear:'佛曆 (BE)', lunarYear:'農曆', unixTimestamp:'Unix 時戳', julianDay:'儒略日 (JD)', yourTime:'此乃君之時（誤）：', timeWarning:'君時不準，或致部分功能不可用。', continueBtn:'繼續訪網', reconnecting:'重連中...', lostEmptyMsg:'現無失物。', btnMLP:'公路騎警', privacyPolicy:'隱私策', license:'許可證', privacyText:'依國家規第2133號《政府部門隱私與網絡安全 — 第二版》（UPL國會，國法）所定，凡與政府相關之在線門戶，於將行任何形式之數據收集或存儲時，皆有義務向用戶提供清晰可見之通知。此規確保用戶於任何數據處理活動開始前，能完全知情並理解其信息可能如何被處理。\n\n網站uplgov.github.io/youngshine 不存儲、記錄或保留任何用戶數據、文件或材料。其僅作信息平台運作，且不啟動任何形式之數據收集。\n\n然，於Youngshine體系下運營之某些子域名——例如由特定部門（含警察部門）管理之門戶——可能實施其自有之數據處理機制，並可能作為其運營功能之一部分存儲信息。由於此等子域名獨立管理，其數據處理實踐可能有所不同。', licenseText:'本網站及其所含全部材料均受限制性許可證保護，該許可證旨在保障作品之完整性。網站內容僅可用於非商業目的，且任何此類使用皆須明確且顯著地標明原始來源：uplgov.github.io/youngshine。本網站任何部分均不得修改、改編、更動或用於創作衍生作品。任何情況下均嚴格禁止商業用途。超出明確授權範圍之任何使用，均須事先獲得網站所有者之書面授權。', quickExitBtn:'急离此卷', relatedLinksLabel:'相關鏈接', youngshineGov:'Youngshine 政府', uplCentralGov:'UPL 中央政府', policeUPL:'UPL 警察', massiveDynamic:'Massive Dynamic' },
+    ru: { emergencyLabel:'ЧП:', nonEmergencyLabel:'НЕ ЧП:', reportEmerg:'СООБЩИТЬ О ЧП', callNote:'110/009 бесплатный звонок, SIM-карта не требуется (требуется сотовая связь) | 110/009 отчет по SMS доступен', justice:'СПРАВЕДЛИВОСТЬ', professionalism:'ПРОФЕССИОНАЛИЗМ', protection:'ЗАЩИТА', respTime:'СРЕДНЕЕ ВРЕМЯ ОТВЕТА 2025', clearRate:'СРЕДНИЙ УРОВЕНЬ РАСКРЫВАЕМОСТИ 2025', respTooltip:'Конкретно означает средний временной интервал с момента, когда оператор вешает трубку после экстренного вызова и диспетчер завершает назначение, до прибытия первого сотрудника на место и подтверждения местоположения. В расчет обычно включается время обработки вызова и время в пути, но исключается время работы на месте. Этот показатель является ключевым KPI, измеряющим мобильность полиции и плотность охвата территории; чем ниже значение, тем выше способность к экстренному реагированию.', clearTooltip:'В течение определенного статистического периода средний процент, полученный путем деления числа дел, законно закрытых (раскрытых, переданных в суд или иным образом урегулированных), на общее число зарегистрированных дел за тот же период. Обратите внимание, что этот показатель не отражает напрямую, произошло ли преступление; он лишь измеряет эффективность обработки зарегистрированных дел. В системе Uniform Crime Reporting США закрытие обычно достигается путем ареста или исключительных обстоятельств. Это еще один ключевой KPI для оценки эффективности расследований и качества управления общественной безопасностью.', respVal:'17м 04с', clearVal:'98.2%', respTrend:'6с vs 2024', clearTrend:'0.6% ниже vs 2024', footerText:'© 1945 - 3019 Capital Constabulary, The Great Youngshine, Woolsey City and United Telos · Technical support by Wareflame', modalHead:'Сообщение о ЧП', directCallHint:'При чрезвычайных ситуациях звоните 110 напрямую. SIM-карта не требуется.', serviceLabel:'Выберите услуги (нажмите для выбора, можно несколько)', servicePolice:'Полиция', serviceRescue:'Спасение', serviceFire:'Пожар', serviceMedical:'Медицина', locationLabel:'Местоположение / Координаты', visibleLabel:'Вы находитесь на открытой/видной местности?', optYes:'Да', optNo:'Нет', contactLabel:'Контакт (опционально)', commentLabel:'Дополнительные комментарии', commentPlaceholder:'Пожалуйста, подробно опишите ситуацию...', sosBtn:'НЕМЕДЛЕННО SOS', cancel:'Отмена', locateBtn:'Определить мое местоположение', contrast:'Контраст', grayscale:'Оттенки серого', saturate:'Насыщенность', crosshair:'Цвет прицела', enableCursor:'Включить помощь прицела', reset:'Сброс', langTitle:'Выберите язык', emergQueueMsg:'Поддержка в пути', selectServiceError:'Пожалуйста, выберите хотя бы одну услугу', locationRequiredError:'Пожалуйста, сначала определите ваше местоположение', captchaRequiredError:'Пожалуйста, завершите верификацию', captchaModalTitle:'Требуется верификация', captchaModalText:'Пожалуйста, завершите верификацию ниже, чтобы продолжить.', captchaConfirm:'Подтвердить', captchaCancel:'Отмена', dbNotice:'Национальная база данных UPL | Общенациональные синхронизированные данные', lostTitle:'Бюро находок', btn1:'Сообщить о преступлении', btn2:'Сообщите нам', btn3:'Бюро находок', btn4:'Подать заявку', btn5:'Запрос', btn6:'Жалоба, благодарность', btn7:'Общественные файлы', btn8:'Вступить в CC', btn9:'В полицию', btn10:'Кабинет начальника', supportGov:'Поддержать правительство', timeCheckTitle:'Ваши Часы Неточны', timeCheckSubtitle:'Ваши часы неточны. Правильное время:', utcTime:'Время UTC', localTime:'Местное Время', buddhistYear:'Буддийская Эра (BE)', lunarYear:'Лунный Календарь', unixTimestamp:'Unix Время', julianDay:'Юлианский День (JD)', yourTime:'Время вашего устройства (неверное):', timeWarning:'Неточные часы могут привести к недоступности некоторых функций.', continueBtn:'Продолжить на Сайт', reconnecting:'Переподключение...', lostEmptyMsg:'В настоящее время нет потерянных предметов.', btnMLP:'Патруль автомагистралей и полос', privacyPolicy:'Политика конфиденциальности', license:'Лицензия', privacyText:'В соответствии с требованиями, изложенными в национальном постановлении 2133 «Конфиденциальность и кибербезопасность для государственных департаментов – Версия 2» (Национальный парламент UPL, национальное законодательство), все связанные с правительством онлайн-порталы обязаны предоставлять пользователям четкое и заметное уведомление всякий раз, когда должна иметь место любая форма сбора или хранения данных. Это требование гарантирует, что пользователи будут полностью информированы и смогут понять, как их информация может обрабатываться до начала любых действий по обработке данных.\n\nВеб-сайт uplgov.github.io/youngshine не хранит, не записывает и не сохраняет никакие пользовательские данные, файлы или материалы. Он работает исключительно как информационная платформа и не инициирует никаких форм сбора данных.\n\nОднако определенные поддомены, работающие под эгидой Youngshine, такие как порталы, управляемые конкретными департаментами, включая полицейский департамент, могут реализовывать собственные механизмы обработки данных и могут хранить информацию в рамках своих операционных функций. Поскольку эти поддомены управляются независимо, их методы обработки данных могут различаться.', licenseText:'Этот веб-сайт и все содержащиеся здесь материалы защищены ограничительной лицензией, предназначенной для сохранения целостности работы. Содержимое может использоваться исключительно в некоммерческих целях, и любое такое использование должно включать четкую и заметную ссылку на первоисточник: uplgov.github.io/youngshine. Никакая часть этого веб-сайта не может быть изменена, адаптирована, изменена или использована для создания производных работ. Коммерческое использование строго запрещено при любых обстоятельствах. Любое использование, выходящее за пределы прямо предоставленных разрешений, требует предварительного письменного разрешения владельца сайта.', quickExitBtn:'ВЫЙТИ', relatedLinksLabel:'Связанные ссылки', youngshineGov:'Youngshine Правительство', uplCentralGov:'Центральное правительство UPL', policeUPL:'Полиция UPL', massiveDynamic:'Massive Dynamic' },
+    mn: { emergencyLabel:'ЯАЛТАЙ:', nonEmergencyLabel:'ЯАЛТГҮЙ:', reportEmerg:'ЯАЛТАЙ МЭДЭЭЛЭХ', callNote:'110/009 дуудлага үнэгүй, SIM карт шаардлагагүй (Үүрэн холбооны хамрах хүрээ шаардлагатай) | 110/009 SMS мэдээлэх боломжтой', justice:'ШУДАРГА ЁС', professionalism:'МЭРГЭЖИЛ', protection:'ХАМГААЛАЛ', respTime:'2025 ОНЫ ДУНДАЖ ХАРИУ АВСАН ХУГАЦАА', clearRate:'2025 ОНЫ ДУНДАЖ ШИЙДВЭРЛЭЛТИЙН ТҮВШИН', respTooltip:'Яаралтай дуудлагыг оператор тасалж, диспетчер даалгаврыг гүйцэтгэсэн үеэс эхлэн анхны цагдаагийн албан хаагч газар дээр ирж, байршлыг баталгаажуулах хүртэлх дундаж хугацааны завсар. Тооцоололд дуудлага боловсруулах хугацаа, замд явах хугацаа багтах боловч газар дээр ажиллах хугацаа орохгүй. Энэ үзүүлэлт нь цагдаагийн хөдөлгөөнт чадвар, харьяалах нутаг дэвсгэрийн хамрах хүрээний нягтралыг хэмжих гол KPI юм. Бага утга нь илүү өндөр хариу үйлдэл үзүүлэх чадварыг илтгэнэ.', clearTooltip:'Тухайн статистикийн хугацаанд хуулийн дагуу шийдвэрлэсэн (илрүүлсэн, яллах дүгнэлт үйлдсэн эсвэл өөр аргаар шийдвэрлэсэн) хэргийн тоог мөн хугацаанд бүртгэгдсэн нийт хэргийн тоонд хувааж олсон дундаж хувь. Анхаарна уу: энэ үзүүлэлт нь гэмт хэрэг гарсан эсэхийг шууд илтгэдэггүй; зөвхөн бүртгэгдсэн хэргийн боловсруулалтын үр ашгийг хэмждэг. АНУ-ын Нэгдсэн Гэмт Хэргийн Тайлангийн системд хэргийг ихэвчлэн баривчлах эсвэл онцгой тохиолдлоор шийдвэрлэдэг. Энэ нь мөрдөн байцаалтын үр нөлөө, нийтийн аюулгүй байдлын удирдлагын чанарыг үнэлэх өөр нэг гол KPI юм.', respVal:'17м 04с', clearVal:'98.2%', respTrend:'2024-ээс 6с хурдан', clearTrend:'2024-ээс 0.6% бага', footerText:'© 1945 - 3019 Capital Constabulary, The Great Youngshine, Woolsey City and United Telos · Technical support by Wareflame', modalHead:'Яаралтай мэдээлэх', directCallHint:'Яаралтай тохиолдолд 110 руу шууд залгана уу. SIM карт шаардлагагүй.', serviceLabel:'Үйлчилгээ сонгох (дарах замаар сонгох, олон сонголттой)', servicePolice:'Цагдаа', serviceRescue:'Аврах', serviceFire:'Гал', serviceMedical:'Эмнэлэг', locationLabel:'Байршил / Координат', visibleLabel:'Та нээлттэй үзэгдэх хэсэгт байна уу?', optYes:'Тийм', optNo:'Үгүй', contactLabel:'Холбоо барих (заавал биш)', commentLabel:'Нэмэлт сэтгэгдэл', commentPlaceholder:'Та нөхцөл байдлыг дэлгэрэнгүй тайлбарлана уу...', sosBtn:'ЯАРАЛТАЙ SOS', cancel:'Цуцлах', locateBtn:'Байршлаа авах', contrast:'Ялгаа', grayscale:'Саарал', saturate:'Ханасан байдал', crosshair:'Харааны цэгийн өнгө', enableCursor:'Харааны цэгийн туслах идэвхжүүлэх', reset:'Дахин тохируулах', langTitle:'Хэл сонгох', emergQueueMsg:'Тусламж замдаа', selectServiceError:'Дор хаяж нэг үйлчилгээ сонгоно уу', locationRequiredError:'Эхлээд байршлаа аваарай', captchaRequiredError:'Баталгаажуулалтыг гүйцэтгэнэ үү', captchaModalTitle:'Баталгаажуулалт шаардлагатай', captchaModalText:'Үргэлжлүүлэхийн тулд доорх баталгаажуулалтыг гүйцэтгэнэ үү.', captchaConfirm:'Баталгаажуулах', captchaCancel:'Цуцлах', dbNotice:'UPL Үндэсний мэдээллийн сан | Үндэсний хэмжээний синхрончлогдсон өгөгдөл', lostTitle:'Алдагдсан эд зүйлс', btn1:'Гэмт хэрэг мэдээлэх', btn2:'Бидэнд хэлэх', btn3:'Алдагдсан эд зүйлс', btn4:'Өргөдөл гаргах', btn5:'Хүсэлт', btn6:'Гомдол, талархал, санал', btn7:'Нээлттэй файлууд', btn8:'CC-д элсэх', btn9:'Цагдаа руу', btn10:'Даргын өрөө', supportGov:'Засгийг дэмжих', timeCheckTitle:'Таны Цаг Буруу Байна', timeCheckSubtitle:'Таны цаг буруу байна. Зөв цаг нь:', utcTime:'UTC Цаг', localTime:'Орон Нутгийн Цаг', buddhistYear:'Буддын Он (BE)', lunarYear:'Цагаан сар', unixTimestamp:'Unix Цагийн Тэмдэг', julianDay:'Юлианы Өдөр (JD)', yourTime:'Таны төхөөрөмжийн цаг (буруу):', timeWarning:'Таны цаг буруу тул зарим функц ажиллахгүй байж болно.', continueBtn:'Вэбсайт руу Үргэлжлүүлэх', reconnecting:'Дахин холбогдож байна...', lostEmptyMsg:'Одоогоор алдагдсан зүйл байхгүй.', btnMLP:'Хурдны зам ба эгнээний эргүүл', privacyPolicy:'Нууцлалын бодлого', license:'Лиценз', privacyText:'Улсын 2133 дугаар "Засгийн газрын хэлтсийн нууцлал ба кибер аюулгүй байдал – 2-р хувилбар" (UPL Үндэсний Парламент, улсын хууль)-д заасан шаардлагын дагуу засгийн газартай холбоотой бүх онлайн порталууд ямар нэгэн хэлбэрийн мэдээлэл цуглуулах эсвэл хадгалах гэж байгаа үед хэрэглэгчдэд тодорхой, харагдах мэдэгдэл өгөх үүрэгтэй. Энэхүү шаардлага нь аливаа мэдээлэл боловсруулах үйл ажиллагаа эхлэхээс өмнө хэрэглэгчид бүрэн мэдээлэлтэй байх, тэдний мэдээллийг хэрхэн боловсруулж болохыг ойлгох боломжийг хангадаг.\n\nuplgov.github.io/youngshine вэбсайт нь хэрэглэгчийн мэдээлэл, файл эсвэл материалыг хадгалдаггүй, бүртгэдэггүй, хадгалдаггүй. Энэ нь зөвхөн мэдээллийн платформ хэлбэрээр ажилладаг бөгөөд ямар ч хэлбэрийн мэдээлэл цуглуулах ажиллагааг эхлүүлдэггүй.\n\nГэсэн хэдий ч Youngshine-ийн дор ажилладаг тодорхой дэд домэйнууд, тухайлбал цагдаагийн хэлтэс зэрэг тодорхой хэлтсүүдийн удирддаг порталууд нь өөрсдийн мэдээлэл боловсруулах механизмыг хэрэгжүүлж, үйл ажиллагааны функцүүдийн нэг хэсэг болгон мэдээллийг хадгалж болно. Эдгээр дэд домэйнууд бие даан удирдагддаг тул тэдгээрийн мэдээлэл боловсруулах практик нь өөр өөр байж болно.', licenseText:'Энэхүү вэбсайт болон түүнд агуулагдаж буй бүх материалууд нь бүтээлийн бүрэн бүтэн байдлыг хамгаалах зорилготой хязгаарлалтын лицензээр хамгаалагдсан. Агуулгыг зөвхөн арилжааны бус зорилгоор ашиглаж болох бөгөөд ийм аливаа ашиглалт нь анхны эх сурвалж болох uplgov.github.io/youngshine-д тодорхой, харагдах атрибутыг оруулах ёстой. Энэхүү вэбсайтын аль ч хэсгийг өөрчлөх, дасан зохицох, өөрчлөх эсвэл дериватив бүтээл бүтээхэд ашиглахыг хориглоно. Арилжааны хэрэглээг ямар ч тохиолдолд хатуу хориглоно. Тодорхой олгогдсон зөвшөөрлөөс хэтэрсэн аливаа хэрэглээ нь сайтын эзнээс урьдчилсан бичгээр зөвшөөрөл авахыг шаардана.', quickExitBtn:'ГАРАХ', relatedLinksLabel:'Холбоотой холбоосууд', youngshineGov:'Youngshine Засгийн газар', uplCentralGov:'UPL Төв Засгийн газар', policeUPL:'Цагдаа UPL', massiveDynamic:'Massive Dynamic' },
+    ja: { emergencyLabel:'緊急:', nonEmergencyLabel:'非緊急:', reportEmerg:'緊急通報', callNote:'110/009 通話無料、SIM不要（携帯電話の圏内が必要）| 110/009 SMS通報可能', justice:'正義', professionalism:'専門性', protection:'保護', respTime:'2025年平均応答時間', clearRate:'2025年平均解決率', respTooltip:'具体的には、通報受付者が緊急通話を切り、指令担当者が指令を完了した時点から、最初の警察官が現場に到着し位置を確認するまでの平均時間間隔を指します。その計算には通常、通話処理時間と移動時間が含まれ、現場対応時間は含まれません。この指標は警察の機動力と管轄区域のカバー密度を測定する中核的なKPIであり、数値が低いほど緊急対応能力が高いことを示します。', clearTooltip:'特定の統計期間内において、法的に処理（解決、起訴送致、またはその他の処理）された事件数を、同期間に受理された事件総数で割った平均パーセンテージです。なお、この指標は犯罪が発生したかどうかを直接反映するものではなく、報告された事件の処理効率のみを測定します。米国の統一犯罪報告システムでは、通常、逮捕または例外的な手段による処理をもって解決とみなされます。これは捜査効率と治安管理の質を評価するもう一つの中核的なKPIです。', respVal:'17分04秒', clearVal:'98.2%', respTrend:'2024年より6秒高速', clearTrend:'2024年より0.6%低下', footerText:'© 1945 - 3019 Capital Constabulary, The Great Youngshine, Woolsey City and United Telos · Technical support by Wareflame', modalHead:'緊急通報', directCallHint:'緊急時は110に直接おかけください。SIMカードは不要です。', serviceLabel:'サービスを選択（クリックで選択、複数選択可）', servicePolice:'警察', serviceRescue:'救助', serviceFire:'消防', serviceMedical:'医療', locationLabel:'位置 / GPS座標', visibleLabel:'開けた場所/目に見える場所にいますか？', optYes:'はい', optNo:'いいえ', contactLabel:'連絡先（任意）', commentLabel:'追加コメント', commentPlaceholder:'状況を詳しく説明してください...', sosBtn:'緊急SOS', cancel:'キャンセル', locateBtn:'現在地を取得', contrast:'コントラスト', grayscale:'グレースケール', saturate:'彩度', crosshair:'クロスヘアカラー', enableCursor:'クロスヘアアシストを有効にする', reset:'リセット', langTitle:'言語を選択', emergQueueMsg:'支援が向かっています', selectServiceError:'少なくとも1つのサービスを選択してください', locationRequiredError:'最初に現在地を取得してください', captchaRequiredError:'認証を完了してください', captchaModalTitle:'認証が必要です', captchaModalText:'続行するには下の認証を完了してください。', captchaConfirm:'確認', captchaCancel:'キャンセル', dbNotice:'UPL全国データベース | 全国同期データ', lostTitle:'忘れ物', btn1:'犯罪を報告', btn2:'お知らせ', btn3:'忘れ物', btn4:'申請または登録', btn5:'リクエスト', btn6:'苦情・感謝・提案', btn7:'公開情報', btn8:'CC参加', btn9:'警察署へ', btn10:'署長室', supportGov:'政府を支援', timeCheckTitle:'時計が不正確です', timeCheckSubtitle:'お使いの時計が不正確です。正しい時刻は：', utcTime:'UTC 時刻', localTime:'現地時刻', buddhistYear:'仏暦 (BE)', lunarYear:'旧暦', unixTimestamp:'Unix タイムスタンプ', julianDay:'ユリウス日 (JD)', yourTime:'お使いの端末の時刻（誤り）：', timeWarning:'時計が不正確なため、一部の機能が利用できない可能性があります。', continueBtn:'サイトへ進む', reconnecting:'再接続中...', lostEmptyMsg:'現在、紛失物はありません。', btnMLP:'高速道路・車線パトロール', privacyPolicy:'プライバシーポリシー', license:'ライセンス', privacyText:'国定規則第2133号「政府部門のプライバシーとサイバーセキュリティ – バージョン2」（UPL国会、国内法）に定められた要件に従い、政府関連のオンラインポータルはすべて、何らかの形式のデータ収集または保存が行われようとしている場合、ユーザーに明確かつ目に見える通知を提供する義務を負います。この要件により、ユーザーはデータ処理活動の開始前に十分な情報を得て、自分の情報がどのように処理される可能性があるかを理解できるようになります。\n\nウェブサイト uplgov.github.io/youngshine は、ユーザーデータ、ファイル、または資料を保存、記録、または保持しません。情報提供プラットフォームとしてのみ機能し、いかなる形式のデータ収集も開始しません。\n\nただし、Youngshineの傘下で運営される特定のサブドメイン（警察部門を含む特定の部門が管理するポータルなど）は、独自のデータ処理メカニズムを実装し、運用機能の一部として情報を保存する場合があります。これらのサブドメインは独立して管理されているため、そのデータ処理方法は異なる場合があります。', licenseText:'このウェブサイトおよびここに含まれるすべての素材は、作品の完全性を保護するために設計された制限的ライセンスの下で保護されています。コンテンツは非営利目的でのみ使用でき、そのような使用には元のソース uplgov.github.io/youngshine への明確で目に見える帰属表示を含める必要があります。このウェブサイトのいかなる部分も、修正、翻案、変更、または派生作品の作成に使用することはできません。商業的使用はすべての状況下で厳しく禁止されています。明示的に許可された範囲を超える使用には、サイト所有者からの事前の書面による承認が必要です。', quickExitBtn:'退出する', relatedLinksLabel:'関連リンク', youngshineGov:'Youngshine 政府', uplCentralGov:'UPL 中央政府', policeUPL:'警察 UPL', massiveDynamic:'Massive Dynamic' },
+    ko: { emergencyLabel:'긴급:', nonEmergencyLabel:'비긴급:', reportEmerg:'긴급 신고', callNote:'110/009 통화 무료, SIM 필요 없음 (셀룰러 커버리지 필요) | 110/009 SMS 신고 가능', justice:'정의', professionalism:'전문성', protection:'보호', respTime:'2025년 평균 응답 시간', clearRate:'2025년 평균 해결율', respTooltip:'구체적으로, 신고 접수원이 긴급 전화를 끊고 배차 담당자가 배차를 완료한 시점부터 첫 번째 경찰관이 현장에 도착하여 위치를 확인할 때까지의 평균 시간 간격을 의미합니다. 계산에는 일반적으로 통화 처리 시간과 이동 시간이 포함되며, 현장 처리 시간은 제외됩니다. 이 지표는 경찰의 기동성과 관할 구역 커버리지 밀도를 측정하는 핵심 KPI로, 수치가 낮을수록 긴급 대응 능력이 높음을 나타냅니다.', clearTooltip:'특정 통계 기간 동안 법적으로 종결(해결, 기소 의견 송치 또는 기타 처리)된 사건 수를 같은 기간 접수된 총 사건 수로 나눈 백분율 평균입니다. 이 지표는 범죄 발생 여부를 직접 반영하지 않으며, 신고된 사건의 처리 효율만을 측정합니다. 미국 통합 범죄 보고 시스템에서는 일반적으로 체포 또는 예외적 수단에 의한 종결을 해결 기준으로 삼습니다. 이는 수사 효율성과 치안 관리 품질을 평가하는 또 다른 핵심 KPI입니다.', respVal:'17분 04초', clearVal:'98.2%', respTrend:'2024년 대비 6초 단축', clearTrend:'2024년 대비 0.6% 하락', footerText:'© 1945 - 3019 Capital Constabulary, The Great Youngshine, Woolsey City and United Telos · Technical support by Wareflame', modalHead:'긴급 신고', directCallHint:'긴급 상황시 110으로 직접 전화하세요. SIM 카드가 필요하지 않습니다.', serviceLabel:'서비스 선택 (클릭하여 선택, 여러 개 선택 가능)', servicePolice:'경찰', serviceRescue:'구조', serviceFire:'화재', serviceMedical:'의료', locationLabel:'위치 / GPS 좌표', visibleLabel:'열린 공간/보이는 장소에 있습니까?', optYes:'예', optNo:'아니오', contactLabel:'연락처 (선택 사항)', commentLabel:'추가 코멘트', commentPlaceholder:'상황을 자세히 설명해주세요...', sosBtn:'긴급 SOS', cancel:'취소', locateBtn:'내 위치 가져오기', contrast:'대비', grayscale:'흑백', saturate:'채도', crosshair:'조준선 색상', enableCursor:'조준선 지원 활성화', reset:'초기화', langTitle:'언어 선택', emergQueueMsg:'지원 출동 중', selectServiceError:'최소 하나의 서비스를 선택하세요', locationRequiredError:'먼저 내 위치를 가져오세요', captchaRequiredError:'인증을 완료해주세요', captchaModalTitle:'인증 필요', captchaModalText:'계속하려면 아래 인증을 완료해주세요.', captchaConfirm:'확인', captchaCancel:'취소', dbNotice:'UPL 국가 데이터베이스 | 전국 동기화 데이터', lostTitle:'분실물', btn1:'범죄 신고', btn2:'알려주세요', btn3:'분실물', btn4:'신청 또는 등록', btn5:'요청', btn6:'불만, 감사, 제안', btn7:'공개 정보', btn8:'CC 가입', btn9:'경찰서로', btn10:'서장실', supportGov:'정부 지원', timeCheckTitle:'시계가 부정확합니다', timeCheckSubtitle:'시계가 부정확합니다. 올바른 시간은:', utcTime:'UTC 시간', localTime:'현지 시간', buddhistYear:'불기 (BE)', lunarYear:'음력', unixTimestamp:'Unix 타임스탬프', julianDay:'율리우스일 (JD)', yourTime:'기기 시간 (오류):', timeWarning:'시계가 부정확하여 일부 기능을 사용하지 못할 수 있습니다.', continueBtn:'웹사이트 계속하기', reconnecting:'다시 연결 중...', lostEmptyMsg:'현재 분실물이 없습니다.', btnMLP:'고속도로 및 차선 순찰', privacyPolicy:'개인정보 보호정책', license:'라이선스', privacyText:'국가 규정 제2133호 "정부 부서의 개인 정보 보호 및 사이버 보안 – 버전 2"(UPL 국회, 국가 법률)에 명시된 요구 사항에 따라, 정부 관련 온라인 포털은 모든 형태의 데이터 수집 또는 저장이 발생하려는 경우 사용자에게 명확하고 눈에 띄는 고지를 제공할 의무가 있습니다. 이 요구 사항은 사용자가 데이터 처리 활동을 시작하기 전에 완전히 정보를 얻고 자신의 정보가 어떻게 처리될 수 있는지 이해할 수 있도록 보장합니다.\n\n웹사이트 uplgov.github.io/youngshine는 사용자 데이터, 파일 또는 자료를 저장, 기록 또는 보유하지 않습니다. 정보 제공 플랫폼으로만 운영되며 어떤 형태의 데이터 수집도 시작하지 않습니다.\n\n그러나 Youngshine 산하에서 운영되는 특정 하위 도메인(경찰 부서를 포함한 특정 부서에서 관리하는 포털 등)은 자체 데이터 처리 메커니즘을 구현하고 운영 기능의 일부로 정보를 저장할 수 있습니다. 이러한 하위 도메인은 독립적으로 관리되므로 데이터 처리 방식이 다를 수 있습니다.', licenseText:'이 웹사이트 및 여기에 포함된 모든 자료는 저작물의 무결성을 보호하기 위해 설계된 제한적 라이선스에 따라 보호됩니다. 콘텐츠는 비상업적 목적으로만 사용할 수 있으며, 그러한 사용에는 원본 출처 uplgov.github.io/youngshine에 대한 명확하고 눈에 띄는 저작자 표시가 포함되어야 합니다. 이 웹사이트의 어떤 부분도 수정, 변경, 변형 또는 파생 저작물을 만드는 데 사용할 수 없습니다. 상업적 사용은 모든 상황에서 엄격히 금지됩니다. 명시적으로 허가된 범위를 넘는 사용은 사이트 소유자의 사전 서면 승인이 필요합니다.', quickExitBtn:'나가기', relatedLinksLabel:'관련 링크', youngshineGov:'Youngshine 정부', uplCentralGov:'UPL 중앙 정부', policeUPL:'UPL 경찰', massiveDynamic:'Massive Dynamic' },
+    hi: { emergencyLabel:'आपातकाल:', nonEmergencyLabel:'गैर-आपातकाल:', reportEmerg:'आपातकाल रिपोर्ट करें', callNote:'110/009 कॉल मुफ्त है, SIM की आवश्यकता नहीं (सेलुलर कवरेज आवश्यक) | 110/009 एसएमएस रिपोर्टिंग उपलब्ध', justice:'न्याय', professionalism:'व्यावसायिकता', protection:'सुरक्षा', respTime:'2025 औसत प्रतिक्रिया समय', clearRate:'2025 औसत निपटान दर', respTooltip:'विशेष रूप से, उस समय से औसत समय अंतराल को संदर्भित करता है जब कॉल लेने वाला आपातकालीन कॉल काट देता है और डिस्पैचर कार्य सौंप देता है, तब से लेकर पहला अधिकारी घटनास्थल पर पहुंचकर स्थान की पुष्टि करता है। इसकी गणना में आमतौर पर कॉल हैंडलिंग समय और यात्रा समय शामिल होता है, लेकिन घटनास्थल पर कार्रवाई का समय शामिल नहीं होता। यह मीट्रिक पुलिस की गतिशीलता और क्षेत्राधिकार कवरेज घनत्व को मापने वाला एक मुख्य KPI है; कम मान आपातकालीन प्रतिक्रिया क्षमता को अधिक मजबूत दर्शाते हैं।', clearTooltip:'एक विशिष्ट सांख्यिकीय अवधि के भीतर, कानूनी रूप से बंद (सुलझाए गए, अभियोजन के लिए भेजे गए, या अन्यथा निपटाए गए) मामलों की संख्या को उसी अवधि में दर्ज मामलों की कुल संख्या से विभाजित करके प्राप्त प्रतिशत औसत। ध्यान दें कि यह मीट्रिक सीधे यह नहीं दर्शाता कि अपराध हुआ या नहीं; यह केवल दर्ज मामलों की प्रसंस्करण दक्षता को मापता है। अमेरिकी यूनिफ़ॉर्म क्राइम रिपोर्टिंग प्रणाली में, आमतौर पर गिरफ्तारी या असाधारण स्थितियों में मामले को बंद करना समाशोधन माना जाता है। यह जांच प्रभावशीलता और सार्वजनिक सुरक्षा प्रबंधन गुणवत्ता का आकलन करने के लिए एक अन्य मुख्य KPI है।', respVal:'17मी 04से', clearVal:'98.2%', respTrend:'2024 से 6से तेज', clearTrend:'2024 से 0.6% कम', footerText:'© 1945 - 3019 Capital Constabulary, The Great Youngshine, Woolsey City and United Telos · Technical support by Wareflame', modalHead:'आपातकाल रिपोर्ट', directCallHint:'आपात स्थिति के लिए सीधे 110 डायल करें। SIM कार्ड की आवश्यकता नहीं।', serviceLabel:'सेवाएं चुनें (चुनने के लिए क्लिक करें, एकाधिक की अनुमति)', servicePolice:'पुलिस', serviceRescue:'बचाव', serviceFire:'अग्निशमन', serviceMedical:'चिकित्सा', locationLabel:'स्थान / जीपीएस निर्देशांक', visibleLabel:'क्या आप खुले/दिखाई देने वाले क्षेत्र में हैं?', optYes:'हां', optNo:'नहीं', contactLabel:'संपर्क (वैकल्पिक)', commentLabel:'अतिरिक्त टिप्पणियां', commentPlaceholder:'कृपया अपनी स्थिति का विस्तार से वर्णन करें...', sosBtn:'तत्काल SOS', cancel:'रद्द करें', locateBtn:'मेरा स्थान प्राप्त करें', contrast:'कंट्रास्ट', grayscale:'ग्रेस्केल', saturate:'संतृप्ति', crosshair:'क्रॉसहेयर रंग', enableCursor:'क्रॉसहेयर सहायता सक्षम करें', reset:'रीसेट', langTitle:'भाषा चुनें', emergQueueMsg:'सहायता मार्ग पर', selectServiceError:'कृपया कम से कम एक सेवा चुनें', locationRequiredError:'कृपया पहले अपना स्थान प्राप्त करें', captchaRequiredError:'कृपया सत्यापन पूरा करें', captchaModalTitle:'सत्यापन आवश्यक है', captchaModalText:'जारी रखने के लिए कृपया नीचे दिया गया सत्यापन पूरा करें।', captchaConfirm:'पुष्टि करें', captchaCancel:'रद्द करें', dbNotice:'UPL राष्ट्रीय डेटाबेस | राष्ट्रव्यापी सिंक्रनाइज़ डेटा', lostTitle:'खोई हुई वस्तुएं', btn1:'अपराध रिपोर्ट करें', btn2:'हमें बताएं', btn3:'खोई हुई वस्तुएं', btn4:'आवेदन करें', btn5:'अनुरोध', btn6:'शिकायत, धन्यवाद, सुझाव', btn7:'सार्वजनिक फ़ाइलें', btn8:'CC में शामिल हों', btn9:'पुलिस स्टेशन जाएं', btn10:'प्रमुख कक्ष', supportGov:'सरकार का समर्थन करें', timeCheckTitle:'आपकी घड़ी गलत है', timeCheckSubtitle:'आपकी घड़ी गलत है। सही समय है:', utcTime:'UTC समय', localTime:'स्थानीय समय', buddhistYear:'बौद्ध युग (BE)', lunarYear:'चंद्र कैलेंडर', unixTimestamp:'यूनिक्स टाइमस्टैम्प', julianDay:'जूलियन दिवस (JD)', yourTime:'आपके डिवाइस का समय (गलत):', timeWarning:'आपकी गलत घड़ी के कारण कुछ सुविधाएँ अनुपलब्ध हो सकती हैं।', continueBtn:'वेबसाइट पर जारी रखें', reconnecting:'पुनः कनेक्ट हो रहा है...', lostEmptyMsg:'वर्तमान में कोई खोई हुई वस्तु नहीं है।', btnMLP:'मोटरवे और लेन गश्ती', privacyPolicy:'गोपनीयता नीति', license:'लाइसेंस', privacyText:'राष्ट्रीय विनियमन 2133 "सरकारी विभागों के लिए गोपनीयता और साइबर सुरक्षा – संस्करण 2" (यूपीएल राष्ट्रीय संसद, राष्ट्रीय कानून) में निर्धारित आवश्यकताओं के अनुसार, सभी सरकारी संबद्ध ऑनलाइन पोर्टल डेटा संग्रह या भंडारण के किसी भी रूप के होने वाला होने पर उपयोगकर्ताओं को स्पष्ट और दृश्यमान सूचना प्रदान करने के लिए बाध्य हैं। यह आवश्यकता सुनिश्चित करती है कि उपयोगकर्ता पूरी तरह से सूचित हों और किसी भी डेटा प्रोसेसिंग गतिविधियों के शुरू होने से पहले यह समझ सकें कि उनकी जानकारी कैसे संभाली जा सकती है।\n\nवेबसाइट uplgov.github.io/youngshine किसी भी उपयोगकर्ता डेटा, फ़ाइलों या सामग्रियों को संग्रहीत, रिकॉर्ड या बरकरार नहीं रखती है। यह विशेष रूप से एक सूचना मंच के रूप में कार्य करती है और किसी भी प्रकार का डेटा संग्रह शुरू नहीं करती है।\n\nहालाँकि, सिक्ससाइड छत्र के तहत काम करने वाले कुछ सबडोमेन - जैसे कि विशिष्ट विभागों (पुलिस विभाग सहित) द्वारा प्रशासित पोर्टल - अपने स्वयं के डेटा-हैंडलिंग तंत्र को लागू कर सकते हैं और अपने परिचालन कार्यों के हिस्से के रूप में जानकारी संग्रहीत कर सकते हैं। चूंकि ये सबडोमेन स्वतंत्र रूप से प्रबंधित किए जाते हैं, इसलिए उनके डेटा-प्रोसेसिंग अभ्यास भिन्न हो सकते हैं।', licenseText:'यह वेबसाइट और इसमें निहित सभी सामग्री एक प्रतिबंधात्मक लाइसेंस के तहत संरक्षित हैं जो कार्य की अखंडता की रक्षा के लिए डिज़ाइन किया गया है। सामग्री का उपयोग केवल गैर-व्यावसायिक उद्देश्यों के लिए किया जा सकता है, और ऐसे किसी भी उपयोग में मूल स्रोत uplgov.github.io/youngshine के लिए स्पष्ट और दृश्यमान श्रेय शामिल होना चाहिए। इस वेबसाइट के किसी भी हिस्से को संशोधित, अनुकूलित, बदला या व्युत्पन्न कार्य बनाने के लिए उपयोग नहीं किया जा सकता है। सभी परिस्थितियों में व्यावसायिक उपयोग सख्त वर्जित है। स्पष्ट रूप से दी गई अनुमतियों से परे किसी भी उपयोग के लिए साइट स्वामी से पूर्व लिखित प्राधिकरण की आवश्यकता होती है।', quickExitBtn:'तुरंत बाहर जाएं', relatedLinksLabel:'संबंधित लिंक', youngshineGov:'Youngshine सरकार', uplCentralGov:'UPL केंद्र सरकार', policeUPL:'पुलिस UPL', massiveDynamic:'Massive Dynamic' },
+    'zh-Classical': { emergencyLabel:'警急:', nonEmergencyLabel:'常事:', reportEmerg:'報警急', callNote:'110/009 撥打免費，無需SIM卡 (需蜂窩覆蓋) | 110/009 短信報警可用', justice:'義', professionalism:'專', protection:'護', respTime:'乙巳年均應時', clearRate:'乙巳年均結率', respTooltip:'自接警者掛電、調度者派單始，至首警至現場確位止之時均也。其算含通話費時與道途費時，不含現場處置時。此乃衡警機動與轄區密佈之要績，數愈微則應急之能愈強。', clearTooltip:'特定期內，警依法結（破、移訴或他處）之案數，除以同期立案總數之百分均也。當知，此數不直示罪之生否，惟衡報案之處理效耳。在美統罪報系中，常以逮或例外結為清準。此乃評警偵效與治安質之又一要績也。', respVal:'十七分四秒', clearVal:'九八二厘', respTrend:'快六秒比甲辰', clearTrend:'低六毫比甲辰', footerText:'© 1945 - 3019 Capital Constabulary, The Great Youngshine, Woolsey City and United Telos · Technical support by Wareflame', modalHead:'急報', directCallHint:'警急直撥110。毋需SIM卡。', serviceLabel:'擇援類 (點選，可多擇)', servicePolice:'警', serviceRescue:'救', serviceFire:'火', serviceMedical:'醫', locationLabel:'所在 / 經緯', visibleLabel:'君在曠野或可見處否？', optYes:'然', optNo:'否', contactLabel:'繫方 (選填)', commentLabel:'附言', commentPlaceholder:'詳述君之情狀...', sosBtn:'急求', cancel:'止', locateBtn:'取吾所在並定址', contrast:'對比', grayscale:'灰度', saturate:'飽和', crosshair:'準星色', enableCursor:'啟準星輔', reset:'復原', langTitle:'擇語', emergQueueMsg:'援至途中', selectServiceError:'請至少擇一援類', locationRequiredError:'請先取君所在', captchaRequiredError:'請完人機驗證', captchaModalTitle:'驗證 required', captchaModalText:'請完成下方驗證後繼續。', captchaConfirm:'確認', captchaCancel:'取消', dbNotice:'UPL國庫 | 全國同數', lostTitle:'失物', btn1:'報罪', btn2:'告吾', btn3:'失物', btn4:'請或註', btn5:'求', btn6:'訴、謝、議', btn7:'公開文牘', btn8:'入CC', btn9:'赴警署', btn10:'警長之室', supportGov:'輔政', timeCheckTitle:'君之時不準', timeCheckSubtitle:'君之時鐘不準。今時為：', utcTime:'UTC 時', localTime:'本地時', buddhistYear:'佛曆 (BE)', lunarYear:'農曆', unixTimestamp:'Unix 時戳', julianDay:'儒略日 (JD)', yourTime:'此乃君之時（誤）：', timeWarning:'君時不準，或致部分功能不可用。', continueBtn:'繼續訪網', reconnecting:'重連中...', lostEmptyMsg:'現無失物。', btnMLP:'公路騎警', privacyPolicy:'隱私策', license:'許可證', privacyText:'依國家規第2133號《政府部門隱私與網絡安全 — 第二版》（UPL國會，國法）所定，凡與政府相關之在線門戶，於將行任何形式之數據收集或存儲時，皆有義務向用戶提供清晰可見之通知。此規確保用戶於任何數據處理活動開始前，能完全知情並理解其信息可能如何被處理。\n\n網站uplgov.github.io/youngshine 不存儲、記錄或保留任何用戶數據、文件或材料。其僅作信息平台運作，且不啟動任何形式之數據收集。\n\n然，於Youngshine體系下運營之某些子域名——例如由特定部門（含警察部門）管理之門戶——可能實施其自有之數據處理機制，並可能作為其運營功能之一部分存儲信息。由於此等子域名獨立管理，其數據處理實踐可能有所不同。', licenseText:'本網站及其所含全部材料均受限制性許可證保護，該許可證旨在保障作品之完整性。網站內容僅可用於非商業目的，且任何此類使用皆須明確且顯著地標明原始來源：uplgov.github.io/youngshine。本網站任何部分均不得修改、改編、更動或用於創作衍生作品。任何情況下均嚴格禁止商業用途。超出明確授權範圍之任何使用，均須事先獲得網站所有者之書面授權。', quickExitBtn:'急離此卷', relatedLinksLabel:'相關鏈接', youngshineGov:'Youngshine 政府', uplCentralGov:'UPL 中央政府', policeUPL:'UPL 警察', massiveDynamic:'Massive Dynamic' }
+  };
+
+  for (let lang in translations) {
+    if (!translations[lang].btnMLP) translations[lang].btnMLP = translations.en.btnMLP;
+    if (!translations[lang].privacyPolicy) translations[lang].privacyPolicy = translations.en.privacyPolicy;
+    if (!translations[lang].license) translations[lang].license = translations.en.license;
+    if (!translations[lang].privacyText) translations[lang].privacyText = translations.en.privacyText;
+    if (!translations[lang].licenseText) translations[lang].licenseText = translations.en.licenseText;
+    if (!translations[lang].lostEmptyMsg) translations[lang].lostEmptyMsg = translations.en.lostEmptyMsg;
+    if (!translations[lang].relatedLinksLabel) translations[lang].relatedLinksLabel = translations.en.relatedLinksLabel;
+    if (!translations[lang].youngshineGov) translations[lang].youngshineGov = translations.en.youngshineGov;
+    if (!translations[lang].uplCentralGov) translations[lang].uplCentralGov = translations.en.uplCentralGov;
+    if (!translations[lang].policeUPL) translations[lang].policeUPL = translations.en.policeUPL;
+    if (!translations[lang].massiveDynamic) translations[lang].massiveDynamic = translations.en.massiveDynamic;
+  }
+
+  const SimpleLunar = (function() {
+    const LUNAR_DATA = [
+      0x04bd, 0x04ae, 0x0a57, 0x0a4d, 0x0d26, 0x0d53, 0x0d4a, 0x0b44, 0x055d, 0x055b,
+      0x04ae, 0x0a5d, 0x0a4e, 0x0d15, 0x0d55, 0x0d54, 0x0b5a, 0x056d, 0x055d, 0x04ae,
+      0x0a5d, 0x0a56, 0x0d1a, 0x0d55, 0x0d54, 0x0b5a, 0x056d, 0x055d, 0x055b, 0x04ae
+    ];
+    const GAN = ['甲','乙','丙','丁','戊','己','庚','辛','壬','癸'];
+    const ZHI = ['子','丑','寅','卯','辰','巳','午','未','申','酉','戌','亥'];
+    const LUNAR_MONTH = ['正','二','三','四','五','六','七','八','九','十','冬','腊'];
+    const LUNAR_DAY = ['初','十','廿','卅'];
+
+    function getGanZhiYear(year) {
+      let offset = (year - 4) % 60;
+      return GAN[offset % 10] + ZHI[offset % 12] + '年';
+    }
+
+    function getSpringFestival(year) {
+      let data = LUNAR_DATA[year - 1900];
+      let month = Math.floor(data / 100);
+      let day = data % 100;
+      return new Date(year, month - 1, day);
+    }
+
+    function getLunarDate(date) {
+      let year = date.getFullYear();
+      let spring = getSpringFestival(year);
+      if (date < spring) { year--; spring = getSpringFestival(year); }
+      let diff = Math.floor((date - spring) / (1000 * 60 * 60 * 24));
+      let data = LUNAR_DATA[year - 1900];
+      let monthBits = data & 0x1FFF;
+      let month = 0, dayCount = 0;
+      for (let i = 0; i < 12; i++) {
+        let daysInMonth = (monthBits & (1 << i)) ? 30 : 29;
+        if (diff < daysInMonth) { month = i; dayCount = diff + 1; break; }
+        diff -= daysInMonth;
+      }
+      let dayStr = '';
+      if (dayCount <= 10) dayStr = '初' + (dayCount === 10 ? '十' : LUNAR_DAY[dayCount]);
+      else if (dayCount < 20) dayStr = '十' + (dayCount === 11 ? '一' : dayCount === 12 ? '二' : LUNAR_DAY[dayCount - 10]);
+      else if (dayCount === 20) dayStr = '二十';
+      else if (dayCount < 30) dayStr = '廿' + (dayCount === 21 ? '一' : dayCount === 22 ? '二' : LUNAR_DAY[dayCount - 20]);
+      else dayStr = '三十';
+      return getGanZhiYear(year) + LUNAR_MONTH[month] + '月' + dayStr;
+    }
+
+    return { getLunarDate, getGanZhiYear };
+  })();
+
+  function getJulianDay(date) {
+    let y = date.getUTCFullYear();
+    let m = date.getUTCMonth() + 1;
+    let d = date.getUTCDate();
+    let h = date.getUTCHours() + date.getUTCMinutes() / 60 + date.getUTCSeconds() / 3600;
+    if (m <= 2) { y--; m += 12; }
+    let A = Math.floor(y / 100);
+    let B = 2 - A + Math.floor(A / 4);
+    let JD = Math.floor(365.25 * (y + 4716)) + Math.floor(30.6001 * (m + 1)) + d + h / 24 + B - 1524.5;
+    return JD.toFixed(5);
+  }
+
+  function getUnixTimestamp(date) {
+    return Math.floor(date.getTime() / 1000);
+  }
+
+  function formatDateTime(date) {
+    let y = date.getFullYear();
+    let m = String(date.getMonth() + 1).padStart(2, '0');
+    let d = String(date.getDate()).padStart(2, '0');
+    let h = String(date.getHours()).padStart(2, '0');
+    let min = String(date.getMinutes()).padStart(2, '0');
+    let s = String(date.getSeconds()).padStart(2, '0');
+    return `${y}-${m}-${d} ${h}:${min}:${s}`;
+  }
+
+  async function fetchUTCTime() {
+    try {
+      const response = await fetch('https://worldtimeapi.org/api/timezone/Etc/UTC');
+      const data = await response.json();
+      return new Date(data.utc_datetime);
+    } catch (e) {
+      console.warn('UTC API failed, using local time as fallback');
+      return new Date();
+    }
+  }
+
+  const TimeCheckModal = {
+    modal: null,
+    baseDate: null,
+    timer: null,
+    userTimeTimer: null,
+    isActive: false,
+    isClosing: false,
+    timerPending: false,
+
+    init() {
+      this.modal = document.getElementById('timeCheckModal');
+      document.getElementById('continueBtn').onclick = () => this.handleContinue();
+    },
+
+    startTimer() {
+      if (this.timerPending || this.isActive || this.isClosing) return;
+      if (sessionStorage.getItem('timeCheckShown')) return;
+      
+      this.timerPending = true;
+      let delay = 2000 + Math.random() * 6000;
+      setTimeout(() => this.show(), delay);
+    },
+
+    async show() {
+      if (this.isActive || this.isClosing) return;
+      if (sessionStorage.getItem('timeCheckShown')) return;
+      
+      this.isActive = true;
+      this.timerPending = false;
+      sessionStorage.setItem('timeCheckShown', 'true');
+      
+      let nowDate = await fetchUTCTime();
+      this.baseDate = new Date(nowDate);
+      this.baseDate.setFullYear(this.baseDate.getFullYear() + 993);
+      
+      this.updateStaticText();
+      this.modal.style.display = 'flex';
+      this.startRefreshTimer();
+      this.startUserTimeTimer();
+    },
+
+    updateStaticText() {
+      const t = translations[currentLang];
+      if (!t) return;
+      document.getElementById('timeCheckTitle').innerText = t.timeCheckTitle;
+      document.getElementById('timeCheckSubtitle').innerText = t.timeCheckSubtitle;
+      document.getElementById('utcTimeLabel').innerText = t.utcTime;
+      document.getElementById('localTimeLabel').innerText = t.localTime;
+      document.getElementById('buddhistYearLabel').innerText = t.buddhistYear;
+      document.getElementById('lunarYearLabel').innerText = t.lunarYear;
+      document.getElementById('unixTimestampLabel').innerText = t.unixTimestamp;
+      document.getElementById('julianDayLabel').innerText = t.julianDay;
+      document.getElementById('yourTimeLabel').innerText = t.yourTime;
+      document.getElementById('timeWarning').innerText = t.timeWarning;
+      document.getElementById('continueBtn').innerText = t.continueBtn;
+      document.getElementById('loadingText').innerText = t.reconnecting;
+    },
+
+    startRefreshTimer() {
+      if (this.timer) clearInterval(this.timer);
+      this.timer = setInterval(() => this.refresh(), 1000);
+      this.refresh();
+    },
+
+    startUserTimeTimer() {
+      if (this.userTimeTimer) clearInterval(this.userTimeTimer);
+      this.userTimeTimer = setInterval(() => this.updateUserTime(), 1000);
+      this.updateUserTime();
+    },
+
+    refresh() {
+      if (!this.baseDate) return;
+      this.baseDate = new Date(this.baseDate.getTime() + 1000);
+      
+      let utcYear = this.baseDate.getUTCFullYear();
+      let utcMonth = String(this.baseDate.getUTCMonth() + 1).padStart(2, '0');
+      let utcDay = String(this.baseDate.getUTCDate()).padStart(2, '0');
+      let utcHours = String(this.baseDate.getUTCHours()).padStart(2, '0');
+      let utcMins = String(this.baseDate.getUTCMinutes()).padStart(2, '0');
+      let utcSecs = String(this.baseDate.getUTCSeconds()).padStart(2, '0');
+      
+      document.getElementById('utcTimeValue').innerText = `${utcYear}-${utcMonth}-${utcDay} ${utcHours}:${utcMins}:${utcSecs}`;
+      
+      let localDate = new Date(this.baseDate);
+      document.getElementById('localTimeValue').innerText = formatDateTime(localDate);
+      document.getElementById('buddhistYearValue').innerText = `${utcYear + 543}-${utcMonth}-${utcDay} ${utcHours}:${utcMins}:${utcSecs}`;
+      document.getElementById('lunarYearValue').innerText = SimpleLunar.getLunarDate(localDate) + ' ' + 
+        String(localDate.getHours()).padStart(2, '0') + ':' + 
+        String(localDate.getMinutes()).padStart(2, '0') + ':' + 
+        String(localDate.getSeconds()).padStart(2, '0');
+      document.getElementById('unixTimestampValue').innerText = getUnixTimestamp(this.baseDate);
+      document.getElementById('julianDayValue').innerText = getJulianDay(this.baseDate);
+    },
+
+    updateUserTime() {
+      let userDate = new Date();
+      document.getElementById('userTimeValue').innerText = formatDateTime(userDate);
+    },
+
+    handleContinue() {
+      if (this.isClosing) return;
+      this.isClosing = true;
+      
+      const btn = document.getElementById('continueBtn');
+      const loading = document.getElementById('loadingText');
+      btn.disabled = true;
+      btn.style.display = 'none';
+      loading.style.display = 'block';
+      
+      let delay = 1000 + Math.random() * 1300;
+      setTimeout(() => this.close(), delay);
+    },
+
+    close() {
+      if (this.timer) clearInterval(this.timer);
+      if (this.userTimeTimer) clearInterval(this.userTimeTimer);
+      this.modal.style.display = 'none';
+      this.isActive = false;
+      this.isClosing = false;
+      
+      const btn = document.getElementById('continueBtn');
+      const loading = document.getElementById('loadingText');
+      btn.disabled = false;
+      btn.style.display = 'block';
+      loading.style.display = 'none';
+    }
+  };
+
+  let currentLang = 'en';
+  let currentLatLng = null;
+  let selectedServices = [];
+  let counts = { EMERGENCY: 0 };
+  let mottoIndex = 0, mottoInterval = null;
+  let pendingLostCallback = null;
+  let reportCaptchaWidgetId = null;
+  let lostCaptchaWidgetId = null;
+  let langSelected = false;
+
+  const FORMSPREE_URL = 'https://formspree.io/f/mjgplavv';
+
+  async function getDeviceInfo() {
+    const userAgent = navigator.userAgent;
+    let device = 'Unknown', os = 'Unknown';
+    if (/iPhone|iPad|iPod/i.test(userAgent)) {
+      device = 'Apple ' + (/iPhone/i.test(userAgent) ? 'iPhone' : (/iPad/i.test(userAgent) ? 'iPad' : 'iPod'));
+      os = 'iOS';
+    } else if (/Android/i.test(userAgent)) {
+      device = 'Android Device'; os = 'Android';
+    } else if (/Windows/i.test(userAgent)) {
+      device = 'Windows PC'; os = 'Windows';
+    } else if (/Macintosh|Mac OS/i.test(userAgent)) {
+      device = 'Mac'; os = 'macOS';
+    } else if (/Linux/i.test(userAgent)) {
+      device = 'Linux PC'; os = 'Linux';
+    }
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    let ip = 'Unable to retrieve';
+    try {
+      const ipResponse = await fetch('https://api.ipify.org?format=json');
+      const ipData = await ipResponse.json();
+      ip = ipData.ip;
+    } catch (e) { ip = 'IP retrieval failed'; }
+    return { device, os, timezone, ip, userAgent };
+  }
+
+  function showToast(message, isError = false) {
+    const toast = document.createElement('div');
+    toast.className = 'toast-notify' + (isError ? ' error' : '');
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+  }
+
+  async function sendEmailAlert(data) {
+    try {
+      const response = await fetch(FORMSPREE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (response.ok) {
+        const t = translations[currentLang];
+        showToast(t.sosBtn === '立即求救' ? '报警已发送！警方正在赶往现场' : 'Alert sent! Police are on the way');
+        return true;
+      } else {
+        const t = translations[currentLang];
+        showToast(t.sosBtn === '立即求救' ? '发送失败，请直接拨打110' : 'Send failed, please dial 110 directly', true);
+        return false;
+      }
+    } catch (error) {
+      const t = translations[currentLang];
+      showToast(t.sosBtn === '立即求救' ? '网络错误，请直接拨打110' : 'Network error, please dial 110 directly', true);
+      return false;
+    }
+  }
+
+  function updateMotto() {
+    let mottoDiv = document.getElementById('currentMotto');
+    if(!mottoDiv) return;
+    let list = mottoes[currentLang];
+    if (!list || list.length === 0) list = mottoes.en; // fallback
+    mottoDiv.style.animation = 'none';
+    setTimeout(() => { mottoDiv.innerText = list[mottoIndex % list.length]; mottoDiv.style.animation = 'fadeInOut 4s ease-in-out forwards'; }, 10);
+    mottoIndex = (mottoIndex + 1) % list.length;
+  }
+  function startMottoCarousel() { if(mottoInterval) clearInterval(mottoInterval); updateMotto(); mottoInterval = setInterval(updateMotto, 4000); }
+
+  function renderServiceButtons() {
+    let t = translations[currentLang];
+    const btns = [
+      { text: t.btn1, url: 'https://uplgov.github.io/youngshine/police/form1.htm', isSpecial: false },
+      { text: t.btn2, url: 'https://uplgov.github.io/youngshine/police/form2.htm', isSpecial: false },
+      { text: t.btn3, url: '#', isLost: true, isSpecial: false },
+      { text: t.btn4, url: 'https://uplgov.github.io/youngshine/police/form3.htm', isSpecial: false },
+      { text: t.btn5, url: 'https://uplgov.github.io/youngshine/police/form4.htm', isSpecial: false },
+      { text: t.btn6, url: 'https://uplgov.github.io/youngshine/police/form5.htm', isSpecial: false },
+      { text: t.btn7, url: 'publicfiles.htm', isSpecial: false },
+      { text: t.btn8, url: 'jointhepd.htm', isSpecial: false },
+      { text: t.btn9, url: 'tothepd.htm', isSpecial: false },
+      { text: 'The Cosmica', url: 'https://uplgov.github.io/the-cosmica/index.htm', isSpecial: true, fixedLabel: true },
+      { text: t.btn10, url: 'http://uplgov.github.io/youngshine/police/thechief\'s.htm', isSpecial: true, fixedLabel: false },
+      { text: t.btnMLP, url: 'https://uplgov.github.io/youngshine/police/mlp.htm', isSpecial: false }
+    ];
+    const container = document.getElementById('serviceButtonsGrid');
+    if(!container) return;
+    container.innerHTML = '';
+    btns.forEach(btn => {
+      const card = document.createElement('div');
+      card.className = 'service-card';
+      let displayText = btn.fixedLabel ? 'The Cosmica' : btn.text;
+      card.innerHTML = `<h3>${displayText}</h3>`;
+      if(btn.isLost) {
+        card.onclick = () => { showCaptchaForLost(); };
+      } else {
+        card.onclick = () => window.open(btn.url, '_blank');
+      }
+      container.appendChild(card);
+    });
+  }
+  
+  function showEmptyLostMessage() {
+    const t = translations[currentLang];
+    showToast(t.lostEmptyMsg || "Currently no lost items.");
+  }
+  
+  function showCaptchaForLost() {
+    const t = translations[currentLang];
+    const captchaContainer = document.getElementById('lostCaptcha');
+    if (captchaContainer) {
+      captchaContainer.innerHTML = '<div class="h-captcha" data-sitekey="f21e8c1a-d6e8-4332-8106-83ac0cc65c54"></div>';
+      if (typeof hcaptcha !== 'undefined') {
+        const newCaptchaDiv = captchaContainer.querySelector('.h-captcha');
+        if (newCaptchaDiv) lostCaptchaWidgetId = hcaptcha.render(newCaptchaDiv);
+      }
+    }
+    document.getElementById('captchaModalTitle').innerText = t.captchaModalTitle;
+    document.getElementById('captchaModalText').innerText = t.captchaModalText;
+    document.getElementById('confirmCaptchaBtn').innerText = t.captchaConfirm;
+    document.getElementById('cancelCaptchaBtn').innerText = t.captchaCancel;
+    document.getElementById('lostCaptchaError').innerText = '';
+    document.getElementById('captchaModal').style.display = 'block';
+    pendingLostCallback = () => { showEmptyLostMessage(); };
+  }
+  
+  function updateServiceButtonsUI() {
+    document.querySelectorAll('.service-option-btn').forEach(btn => {
+      btn.classList.toggle('selected', selectedServices.includes(btn.getAttribute('data-service')));
+    });
+  }
+  
+  function initServiceButtons() {
+    document.querySelectorAll('.service-option-btn').forEach(btn => {
+      btn.onclick = () => {
+        const service = btn.getAttribute('data-service');
+        selectedServices.includes(service) ? selectedServices = selectedServices.filter(s => s !== service) : selectedServices.push(service);
+        updateServiceButtonsUI();
+        document.getElementById('serviceWarning').innerText = '';
+      };
+    });
+  }
+
+  
+  const CC_I18N={"en": ["Keeping the Telos safe.", "Capital Constabulary serves Youngshine, Woolsey City and United Telos around the clock. Report a crime, find your local officers or get help.", "Report a crime", "Find a station", "Services", "Most things can be done online. If someone is in danger or a crime is happening now, ring 110.", "Report a crime", "Tell us what happened, online, at any hour.", "Start a report", "Lost & found", "Report lost property or check what has been handed in.", "Search items", "Wanted & missing", "Public appeals and missing persons notices.", "View appeals", "Community policing", "Meet your neighbourhood team and join local meetings.", "Your area", "Areas we serve", "One constabulary, three places to look after.", "Local news, officers and contact details.", "Local team", "News & appeals", "The latest from across the Telos.", "Placeholder headline", "A short summary of the news item goes here.", "Contact us", "Choose the right number so emergencies are answered first.", "Emergency", "A crime in progress or danger to life.", "Non-emergency", "Report a crime that is not happening now.", "Headquarters", "Capital Constabulary HQ, Youngshine. Address to be added."], "zh-Hans": ["守护 Telos 平安。", "首都警察局全天候守护 Youngshine、Woolsey City 与 United Telos。您可以报案、查找辖区警务人员或寻求帮助。", "报案", "查找警署", "服务", "大多数事务都可在线办理。如有人身处危险或犯罪正在发生,请立即拨打 110。", "报案", "在线告诉我们发生了什么,全天受理。", "开始报案", "失物招领", "登记遗失物品,或查询已上交的物品。", "查找物品", "通缉与失踪", "公众协查通告与失踪人员公告。", "查看通告", "社区警务", "认识您的社区警务团队,参加本地会议。", "查看辖区", "我们服务的地区", "一支警队,守护三地。", "本地动态、警务人员与联系方式。", "本地团队", "新闻与通告", "来自 Telos 各地的最新消息。", "占位标题", "此处为新闻简要内容。", "联系我们", "请选择正确的号码,以便紧急情况优先处理。", "紧急情况", "犯罪正在发生或生命受到威胁。", "非紧急", "报告当前并未发生的犯罪。", "总部", "首都警察局总部,Youngshine,地址待补充。"], "es": ["Mantener a salvo Telos.", "La Capital Constabulary vela por Youngshine, Woolsey City y United Telos las 24 horas. Denuncie un delito, encuentre a sus agentes locales o pida ayuda.", "Denunciar un delito", "Buscar una comisaría", "Servicios", "La mayoría de los trámites se hacen en línea. Si alguien está en peligro o se está cometiendo un delito, llame al 110.", "Denunciar un delito", "Cuéntenos lo ocurrido en línea, a cualquier hora.", "Iniciar denuncia", "Objetos perdidos", "Notifique un objeto perdido o consulte los entregados.", "Buscar objetos", "Buscados y desaparecidos", "Llamamientos públicos y avisos de personas desaparecidas.", "Ver llamamientos", "Policía comunitaria", "Conozca a su equipo de barrio y asista a las reuniones locales.", "Su zona", "Zonas a las que servimos", "Un cuerpo, tres lugares que cuidar.", "Noticias locales, agentes y datos de contacto.", "Equipo local", "Noticias y llamamientos", "Las últimas novedades de todo Telos.", "Titular de ejemplo", "Aquí irá un breve resumen de la noticia.", "Contacto", "Elija el número adecuado para que las emergencias se atiendan primero.", "Emergencias", "Delito en curso o peligro para la vida.", "No urgente", "Denuncie un delito que no esté ocurriendo ahora.", "Sede central", "Sede de la Capital Constabulary, Youngshine; dirección por añadir."], "de": ["Telos sicher halten.", "Die Capital Constabulary schützt Youngshine, Woolsey City und United Telos rund um die Uhr. Zeigen Sie eine Straftat an, finden Sie Ihre Beamten vor Ort oder holen Sie sich Hilfe.", "Straftat melden", "Wache finden", "Dienste", "Das meiste lässt sich online erledigen. Wenn jemand in Gefahr ist oder gerade eine Straftat geschieht, wählen Sie 110.", "Straftat melden", "Schildern Sie uns online, was passiert ist – rund um die Uhr.", "Meldung starten", "Fundsachen", "Verlust melden oder abgegebene Gegenstände prüfen.", "Gegenstände suchen", "Fahndung & Vermisste", "Öffentliche Aufrufe und Vermisstenmeldungen.", "Aufrufe ansehen", "Bürgernahe Polizeiarbeit", "Lernen Sie Ihr Team vor Ort kennen und besuchen Sie Bürgertreffen.", "Ihr Gebiet", "Unsere Einsatzgebiete", "Eine Behörde, drei Orte, die wir schützen.", "Lokale Meldungen, Beamte und Kontaktdaten.", "Lokales Team", "Nachrichten & Aufrufe", "Aktuelles aus ganz Telos.", "Beispielüberschrift", "Hier steht eine kurze Zusammenfassung der Meldung.", "Kontakt", "Wählen Sie die richtige Nummer, damit Notfälle zuerst bearbeitet werden.", "Notfall", "Straftat läuft oder Lebensgefahr.", "Kein Notfall", "Eine Straftat melden, die nicht gerade geschieht.", "Hauptquartier", "Hauptquartier der Capital Constabulary, Youngshine; Adresse folgt."], "pt": ["Manter Telos em segurança.", "A Capital Constabulary protege Youngshine, Woolsey City e United Telos a toda a hora. Denuncie um crime, encontre os seus agentes locais ou peça ajuda.", "Denunciar um crime", "Encontrar uma esquadra", "Serviços", "A maioria dos assuntos resolve-se online. Se alguém estiver em perigo ou um crime estiver a decorrer, ligue 110.", "Denunciar um crime", "Conte-nos o que aconteceu, online, a qualquer hora.", "Iniciar denúncia", "Perdidos e achados", "Comunique um objeto perdido ou consulte os entregues.", "Procurar objetos", "Procurados e desaparecidos", "Apelos públicos e avisos de pessoas desaparecidas.", "Ver apelos", "Policiamento comunitário", "Conheça a equipa do seu bairro e participe em reuniões locais.", "A sua zona", "Zonas que servimos", "Uma polícia, três locais a proteger.", "Notícias locais, agentes e contactos.", "Equipa local", "Notícias e apelos", "As últimas novidades de todo o Telos.", "Título de exemplo", "Aqui ficará um breve resumo da notícia.", "Contactos", "Escolha o número certo para que as emergências sejam atendidas primeiro.", "Emergência", "Crime em curso ou perigo de vida.", "Não urgente", "Comunique um crime que não esteja a acontecer agora.", "Sede", "Sede da Capital Constabulary, Youngshine; morada a acrescentar."], "zh-Hant": ["守護 Telos 平安。", "首都警察局全天候守護 Youngshine、Woolsey City 與 United Telos。您可以報案、查詢轄區警務人員或尋求協助。", "報案", "查詢警署", "服務", "大多數事務皆可線上辦理。如有人身陷危險或犯罪正在發生,請立即撥打 110。", "報案", "線上告訴我們發生了什麼事,全天受理。", "開始報案", "失物招領", "登記遺失物品,或查詢已送交的物品。", "查詢物品", "通緝與失蹤", "民眾協尋公告與失蹤人口公告。", "查看公告", "社區警政", "認識您的社區警政團隊,參加地方會議。", "查看轄區", "我們服務的地區", "一支警隊,守護三地。", "地方動態、警務人員與聯絡方式。", "地方團隊", "新聞與公告", "來自 Telos 各地的最新消息。", "示意標題", "此處為新聞摘要。", "聯絡我們", "請選擇正確的號碼,讓緊急情況優先處理。", "緊急情況", "犯罪正在發生或生命受到威脅。", "非緊急", "通報目前並未發生的犯罪。", "總部", "首都警察局總部,Youngshine,地址待補。"], "fr": ["Veiller sur la sécurité de Telos.", "La Capital Constabulary protège Youngshine, Woolsey City et United Telos jour et nuit. Signalez un délit, trouvez vos agents locaux ou obtenez de l'aide.", "Signaler un délit", "Trouver un commissariat", "Services", "L'essentiel se fait en ligne. Si une personne est en danger ou si un délit est en cours, appelez le 110.", "Signaler un délit", "Dites-nous ce qui s'est passé, en ligne, à toute heure.", "Commencer le signalement", "Objets trouvés", "Déclarez un objet perdu ou consultez les objets déposés.", "Rechercher des objets", "Avis de recherche et disparitions", "Appels à témoins et avis de disparition.", "Voir les avis", "Police de proximité", "Rencontrez votre équipe de quartier et participez aux réunions locales.", "Votre secteur", "Secteurs desservis", "Une seule force, trois lieux à protéger.", "Actualités locales, agents et coordonnées.", "Équipe locale", "Actualités et appels", "Les dernières nouvelles de tout Telos.", "Titre d'exemple", "Un bref résumé de l'actualité figurera ici.", "Nous contacter", "Choisissez le bon numéro pour que les urgences soient traitées en priorité.", "Urgence", "Délit en cours ou danger de mort.", "Non urgent", "Signalez un délit qui n'est pas en cours.", "Quartier général", "Quartier général de la Capital Constabulary, Youngshine ; adresse à venir."], "lzh": ["保 Telos 平安。", "京师警署昼夜卫 Youngshine、Woolsey City 及 United Telos 三地。有案可报,有警可寻,有难可求。", "报案", "寻警署", "诸务", "诸事多可于网上办理。若人遇险,或罪案方作,即拨 110。", "报案", "陈其事于网上,无时不受。", "始报", "失物招领", "报失物,或察已缴之物。", "寻物", "通缉失踪", "布告众人协寻,及失踪者之示。", "观告示", "乡里警务", "识邻里之警,与会于乡。", "观本境", "所辖之地", "一署之下,三地是守。", "本地消息、警员与通问之法。", "本地之队", "新闻告示", "Telos 各地近事。", "示例题", "新闻之要旨,当载于此。", "通问", "择其号而拨之,使急事先应。", "警急", "罪案方作,或性命有危。", "常事", "报非当下之罪案。", "总署", "京师警署总署,Youngshine,地址待补。"], "ru": ["Обеспечиваем безопасность Telos.", "Capital Constabulary охраняет порядок в Youngshine, Woolsey City и United Telos круглосуточно. Сообщите о преступлении, найдите местных сотрудников или получите помощь.", "Сообщить о преступлении", "Найти отделение", "Услуги", "Большинство вопросов решается онлайн. Если кому-то угрожает опасность или преступление происходит прямо сейчас, звоните 110.", "Сообщить о преступлении", "Расскажите нам, что случилось, онлайн в любое время.", "Начать заявление", "Бюро находок", "Сообщите о потере или проверьте сданные вещи.", "Поиск вещей", "Розыск и пропавшие", "Обращения к жителям и сообщения о пропавших.", "Смотреть обращения", "Работа с населением", "Познакомьтесь с командой своего района и приходите на встречи.", "Ваш район", "Территории обслуживания", "Одна служба, три места под защитой.", "Местные новости, сотрудники и контакты.", "Местная команда", "Новости и обращения", "Свежие новости со всего Telos.", "Пример заголовка", "Здесь будет краткое содержание новости.", "Контакты", "Выберите нужный номер, чтобы срочные случаи обрабатывались первыми.", "Экстренный случай", "Преступление в процессе или угроза жизни.", "Не экстренный", "Сообщить о преступлении, которое происходит не сейчас.", "Штаб-квартира", "Штаб-квартира Capital Constabulary, Youngshine; адрес будет добавлен."], "mn": ["Telos-ийн аюулгүй байдлыг хамгаалъя.", "Capital Constabulary нь Youngshine, Woolsey City болон United Telos-ыг өдөр шөнөгүй хамгаална. Гэмт хэрэг мэдээлэх, орон нутгийн офицеруудаа олох эсвэл тусламж аваарай.", "Гэмт хэрэг мэдээлэх", "Цагдаагийн хэсэг олох", "Үйлчилгээ", "Ихэнх зүйлийг онлайнаар шийдэж болно. Хэн нэгэн аюулд байгаа эсвэл гэмт хэрэг яг одоо болж байвал 110 руу залгана уу.", "Гэмт хэрэг мэдээлэх", "Юу болсныг онлайнаар хэдийд ч бидэнд хэлээрэй.", "Мэдээлэл эхлүүлэх", "Гээгдсэн эд зүйл", "Гээсэн эд зүйлээ мэдэгдэх эсвэл хүлээлгэн өгснийг шалгах.", "Эд зүйл хайх", "Эрэн сурвалжлалт ба сураггүй алдагдсан", "Олон нийтэд хандсан уриалга, сураггүй алга болсон хүмүүсийн мэдэгдэл.", "Уриалга харах", "Олон нийтийн цагдаа", "Хорооныхоо багтай танилцаж, орон нутгийн уулзалтад оролцоорой.", "Таны бүс", "Манай үйлчлэх газрууд", "Нэг байгууллага, гурван газрыг хамгаална.", "Орон нутгийн мэдээ, офицерууд, холбоо барих мэдээлэл.", "Орон нутгийн баг", "Мэдээ ба уриалга", "Telos даяарх сүүлийн мэдээ.", "Жишээ гарчиг", "Энд мэдээний товч агуулга орно.", "Холбоо барих", "Яаралтай дуудлагыг түрүүлж хүлээн авахын тулд зөв дугаараа сонгоно уу.", "Яаралтай", "Гэмт хэрэг болж байна эсвэл амь насанд аюул занал тулсан.", "Яаралтай бус", "Яг одоо болоогүй гэмт хэргийг мэдээлэх.", "Төв байр", "Capital Constabulary-ийн төв байр, Youngshine; хаяг нэмэгдэнэ."], "ja": ["Telosの安全を守ります。", "Capital ConstabularyはYoungshine、Woolsey City、United Telosを24時間体制で守っています。犯罪の通報、地元の警察官の検索、ご相談はこちらから。", "犯罪を通報", "警察署を探す", "サービス", "ほとんどの手続きはオンラインで行えます。身に危険が迫っている場合や犯罪が発生中の場合は、110番に通報してください。", "犯罪を通報", "何が起きたかを、いつでもオンラインでお知らせください。", "通報を開始", "遺失物・拾得物", "遺失物の届出や、届けられた品の確認ができます。", "品物を検索", "指名手配・行方不明", "情報提供のお願いと行方不明者のお知らせ。", "お知らせを見る", "地域警察活動", "地域の担当チームを知り、地元の会合に参加しましょう。", "お住まいの地域", "管轄地域", "ひとつの警察、三つの地域を守ります。", "地域のニュース、警察官、連絡先。", "地域チーム", "ニュース・お知らせ", "Telos各地の最新情報。", "見出しのサンプル", "ここにニュースの要約が入ります。", "お問い合わせ", "緊急の通報が優先されるよう、適切な番号をお選びください。", "緊急", "犯罪の発生中、または生命の危険。", "緊急ではない", "現在発生していない犯罪の通報。", "本部", "Capital Constabulary本部(Youngshine)。住所は追って掲載します。"], "ko": ["Telos의 안전을 지킵니다.", "Capital Constabulary는 Youngshine, Woolsey City, United Telos를 24시간 지킵니다. 범죄를 신고하고, 지역 경찰관을 찾고, 도움을 받으세요.", "범죄 신고", "경찰서 찾기", "서비스", "대부분의 업무는 온라인으로 처리할 수 있습니다. 위험에 처한 사람이 있거나 범죄가 진행 중이라면 110으로 전화하세요.", "범죄 신고", "무슨 일이 있었는지 언제든 온라인으로 알려 주세요.", "신고 시작", "분실물 센터", "분실물을 신고하거나 접수된 물건을 확인하세요.", "물건 검색", "수배 및 실종", "시민 협조 요청과 실종자 안내.", "공지 보기", "지역 사회 경찰", "우리 동네 담당 팀을 만나고 지역 모임에 참여하세요.", "내 지역", "관할 지역", "하나의 경찰, 세 곳을 지킵니다.", "지역 소식, 경찰관, 연락처.", "지역 팀", "뉴스 및 공지", "Telos 전역의 최신 소식.", "샘플 제목", "여기에 뉴스 요약이 들어갑니다.", "문의하기", "긴급 상황이 먼저 처리되도록 알맞은 번호를 선택하세요.", "긴급", "범죄가 진행 중이거나 생명이 위험한 경우.", "비긴급", "지금 일어나고 있지 않은 범죄를 신고합니다.", "본부", "Capital Constabulary 본부, Youngshine. 주소는 추후 추가됩니다."], "hi": ["Telos को सुरक्षित रखना।", "Capital Constabulary, Youngshine, Woolsey City और United Telos की चौबीसों घंटे सुरक्षा करती है। अपराध की रिपोर्ट करें, अपने स्थानीय अधिकारियों को खोजें या मदद पाएँ।", "अपराध की रिपोर्ट करें", "थाना खोजें", "सेवाएँ", "अधिकांश काम ऑनलाइन हो सकते हैं। यदि कोई खतरे में है या अपराध अभी हो रहा है, तो 110 पर कॉल करें।", "अपराध की रिपोर्ट करें", "क्या हुआ, यह हमें किसी भी समय ऑनलाइन बताएँ।", "रिपोर्ट शुरू करें", "खोया-पाया", "खोई वस्तु की सूचना दें या जमा की गई वस्तुएँ देखें।", "वस्तुएँ खोजें", "वांछित और लापता", "जनता से अपील और लापता व्यक्तियों की सूचनाएँ।", "अपीलें देखें", "सामुदायिक पुलिसिंग", "अपने मोहल्ले की टीम से मिलें और स्थानीय बैठकों में शामिल हों।", "आपका क्षेत्र", "हमारे सेवा क्षेत्र", "एक बल, तीन स्थानों की सुरक्षा।", "स्थानीय समाचार, अधिकारी और संपर्क विवरण।", "स्थानीय टीम", "समाचार और अपीलें", "पूरे Telos से ताज़ा खबरें।", "नमूना शीर्षक", "यहाँ समाचार का संक्षिप्त सार आएगा।", "संपर्क करें", "सही नंबर चुनें ताकि आपात स्थितियों पर पहले ध्यान दिया जा सके।", "आपातकाल", "अपराध जारी है या जान को खतरा है।", "गैर-आपातकालीन", "ऐसे अपराध की रिपोर्ट करें जो अभी नहीं हो रहा।", "मुख्यालय", "Capital Constabulary मुख्यालय, Youngshine; पता जोड़ा जाएगा।"], "zh-Classical": ["保 Telos 平安。", "京師警署晝夜衛 Youngshine、Woolsey City 及 United Telos 三地。有案可報,有警可尋,有難可求。", "報案", "尋警署", "諸務", "諸事多可於網上辦理。若人遇險,或罪案方作,即撥 110。", "報案", "陳其事於網上,無時不受。", "始報", "失物招領", "報失物,或察已繳之物。", "尋物", "通緝失蹤", "布告眾人協尋,及失蹤者之示。", "觀告示", "鄉里警務", "識鄰里之警,與會於鄉。", "觀本境", "所轄之地", "一署之下,三地是守。", "本地消息、警員與通問之法。", "本地之隊", "新聞告示", "Telos 各地近事。", "示例題", "新聞之要旨,當載於此。", "通問", "擇其號而撥之,使急事先應。", "警急", "罪案方作,或性命有危。", "常事", "報非當下之罪案。", "總署", "京師警署總署,Youngshine,地址待補。"]};
+  const CC_LOC={"zh-Classical": "zh-Hant", "lzh": "zh-Hans", "en": "en-GB", "mn": "mn"};
+  function applyCC(lang){
+    const L=CC_I18N[lang]||CC_I18N.en;
+    document.querySelectorAll('[data-i]').forEach(e=>{e.textContent=L[+e.dataset.i]});
+    document.documentElement.lang=lang==='en'?'en-GB':lang;
+    const loc=CC_LOC[lang]||lang;
+    document.querySelectorAll('.cc-news time').forEach(e=>{try{e.textContent=new Date(e.getAttribute('datetime').length<6?'2026-'+e.getAttribute('datetime'):e.getAttribute('datetime')).toLocaleDateString(loc,{year:'numeric',month:'long',day:'numeric'})}catch(x){}});
+  }
+  function applyLanguage(lang) {
+    let t = translations[lang];
+    if(!t) return;
+    
+    ['emergencyLabel','nonEmergencyLabel','callNote','wordJustice','wordProfessionalism','wordProtection',
+     'respTimeVal','clearRateVal','respTrend','clearTrend','respLabel','clearLabel','footerText',
+     'modalHead','directCallHint','serviceLabel','locationLabel','visibleLabel','optYes','optNo',
+     'contactLabel','commentLabel','sosBtn','cancelModalBtn','locateBtn','contrastLabel','grayscaleLabel',
+     'saturateLabel','crosshairLabel','cursorEnableLabel','resetAccBtn','langModalTitle',
+     'privacyPolicyBtn','licenseBtn','privacyModalTitle','licenseModalTitle', 'quickExitBtn'].forEach(id => { 
+      let el = document.getElementById(id); if(el && t[id] !== undefined) el.innerText = t[id]; 
+    });
+    
+    if (document.getElementById('privacyModalContent')) document.getElementById('privacyModalContent').innerText = t.privacyText;
+    if (document.getElementById('licenseModalContent')) document.getElementById('licenseModalContent').innerText = t.licenseText;
+    
+    document.getElementById('respTooltip') && (document.getElementById('respTooltip').innerText = t.respTooltip);
+    document.getElementById('clearTooltip') && (document.getElementById('clearTooltip').innerText = t.clearTooltip);
+    document.getElementById('servicePoliceBtn') && (document.getElementById('servicePoliceBtn').innerText = t.servicePolice);
+    document.getElementById('serviceRescueBtn') && (document.getElementById('serviceRescueBtn').innerText = t.serviceRescue);
+    document.getElementById('serviceFireBtn') && (document.getElementById('serviceFireBtn').innerText = t.serviceFire);
+    document.getElementById('serviceMedicalBtn') && (document.getElementById('serviceMedicalBtn').innerText = t.serviceMedical);
+    
+    const supportGovBtn = document.getElementById('supportGovBtn');
+    if (supportGovBtn && t.supportGov) supportGovBtn.innerText = t.supportGov;
+    
+    const commentInput = document.getElementById('commentInput');
+    if(commentInput && t.commentPlaceholder) commentInput.placeholder = t.commentPlaceholder;
+    document.getElementById('emergencyBtn') && (document.getElementById('emergencyBtn').innerText = t.reportEmerg);
+    document.getElementById('submitSosBtn') && (document.getElementById('submitSosBtn').innerText = t.sosBtn);
+    
+    // Update related links text
+    const relatedBtns = document.querySelectorAll('.related-link');
+    if (relatedBtns.length >= 4) {
+      relatedBtns[0].innerText = t.youngshineGov;
+      relatedBtns[1].innerText = t.uplCentralGov;
+      relatedBtns[2].innerText = t.policeUPL;
+      relatedBtns[3].innerText = t.massiveDynamic;
+    }
+    
+    if (TimeCheckModal.isActive) TimeCheckModal.updateStaticText();
+    applyCC(lang);
+  }
+
+  function addDispatchCard() {
+    let t = translations[currentLang];
+    counts.EMERGENCY++;
+    let root = document.getElementById('dispatchRoot');
+    let cardId = 'card-EMERGENCY';
+    let card = document.getElementById(cardId);
+    let msg = t.emergQueueMsg;
+    if(!card) {
+      card = document.createElement('div'); card.id = cardId; card.className = 'dispatch-card';
+      card.innerHTML = `<div class="num-anim-110">110</div><div class="queue-msg">${msg}</div><div class="count-tag" id="${cardId}-c" style="display:none;">x1</div>`;
+      root.appendChild(card);
+    } else {
+      card.querySelector('.queue-msg').innerText = msg;
+    }
+    let tag = document.getElementById(cardId + '-c');
+    if(counts.EMERGENCY > 1) { tag.style.display = 'block'; tag.innerText = 'x' + counts.EMERGENCY; }
+  }
+
+  let map, currentMarker=null, mapInited=false;
+  function initMap(){ if(!mapInited){ map=L.map('map').setView([52.5, -1.0], 12); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map); mapInited=true; } else map.invalidateSize(); }
+  
+  document.getElementById('locateBtn').addEventListener('click',()=>{
+    initMap();
+    document.getElementById('locationError').innerText = '';
+    if(navigator.geolocation){
+      navigator.geolocation.getCurrentPosition(pos=>{
+        let lat=pos.coords.latitude, lng=pos.coords.longitude;
+        map.setView([lat,lng],15);
+        if(currentMarker) map.removeLayer(currentMarker);
+        currentMarker=L.marker([lat,lng]).addTo(map).bindPopup('Your location').openPopup();
+        currentLatLng = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        document.getElementById('latlngInput').value = currentLatLng;
+      }, err=>{ document.getElementById('locationError').innerText = 'Location failed: ' + err.message; });
+    } else { document.getElementById('locationError').innerText = 'Geolocation not supported'; }
+  });
+
+  function openModal(){ 
+    document.getElementById('reportModal').style.display='block'; initMap(); 
+    if(currentMarker&&map)map.removeLayer(currentMarker); currentMarker=null; currentLatLng=null; 
+    document.getElementById('latlngInput').value=''; selectedServices = []; updateServiceButtonsUI();
+    document.querySelectorAll('input[name="visibility"]').forEach(r=>r.checked=false); 
+    document.getElementById('contactInput').value=''; document.getElementById('commentInput').value='';
+    document.getElementById('serviceWarning').innerText=''; document.getElementById('locationError').innerText='';
+    document.getElementById('captchaError').innerText = '';
+    if (typeof hcaptcha !== 'undefined' && reportCaptchaWidgetId !== null) {
+      try { hcaptcha.reset(reportCaptchaWidgetId); } catch(e) {}
+    }
+  }
+  function closeModal(){ document.getElementById('reportModal').style.display='none'; }
+  document.getElementById('cancelModalBtn').onclick=closeModal;
+  document.getElementById('closeLostDetail').onclick=()=>document.getElementById('lostDetailModal').style.display='none';
+  document.getElementById('closeLangModal').onclick=()=>document.getElementById('langModal').style.display='none';
+  
+  document.getElementById('confirmCaptchaBtn').onclick = async () => {
+    const t = translations[currentLang];
+    let captchaToken = null;
+    if (typeof hcaptcha !== 'undefined' && lostCaptchaWidgetId !== null) {
+      try { captchaToken = hcaptcha.getResponse(lostCaptchaWidgetId); } catch(e) {}
+    }
+    if (!captchaToken || captchaToken.length === 0) {
+      document.getElementById('lostCaptchaError').innerText = t.captchaRequiredError;
+      return;
+    }
+    document.getElementById('captchaModal').style.display = 'none';
+    if (pendingLostCallback) { pendingLostCallback(); pendingLostCallback = null; }
+    if (typeof hcaptcha !== 'undefined' && lostCaptchaWidgetId !== null) {
+      try { hcaptcha.reset(lostCaptchaWidgetId); } catch(e) {}
+    }
+  };
+  
+  document.getElementById('cancelCaptchaBtn').onclick = () => {
+    document.getElementById('captchaModal').style.display = 'none';
+    pendingLostCallback = null;
+    if (typeof hcaptcha !== 'undefined' && lostCaptchaWidgetId !== null) {
+      try { hcaptcha.reset(lostCaptchaWidgetId); } catch(e) {}
+    }
+  };
+  
+  document.getElementById('submitSosBtn').onclick=async () => {
+    let t = translations[currentLang];
+    let captchaToken = null;
+    if (typeof hcaptcha !== 'undefined') {
+      try {
+        if (reportCaptchaWidgetId !== null) captchaToken = hcaptcha.getResponse(reportCaptchaWidgetId);
+        else { const captchaElem = document.querySelector('#reportModal .h-captcha'); if (captchaElem) captchaToken = hcaptcha.getResponse(captchaElem); }
+      } catch(e) {}
+    }
+    if (!captchaToken || captchaToken.length === 0) { document.getElementById('captchaError').innerText = t.captchaRequiredError; return; }
+    if(selectedServices.length === 0){ document.getElementById('serviceWarning').innerText = t.selectServiceError; return; }
+    if(!currentLatLng){ document.getElementById('locationError').innerText = t.locationRequiredError; return; }
+    
+    let visibilityRadio = document.querySelector('input[name="visibility"]:checked');
+    let visibility = visibilityRadio ? visibilityRadio.value : 'Not specified';
+    let contact = document.getElementById('contactInput').value || 'Not provided';
+    let comment = document.getElementById('commentInput').value || 'No additional comments';
+    let now = new Date();
+    let timeStr = now.toLocaleString(currentLang === 'zh-Hans' ? 'zh-CN' : 'en-US', { timeZone: 'Asia/Shanghai' });
+    let serviceMap = {'police': t.servicePolice || 'Police','rescue': t.serviceRescue || 'Rescue','fire': t.serviceFire || 'Fire','medical': t.serviceMedical || 'Medical'};
+    let serviceNames = selectedServices.map(s => serviceMap[s] || s).join(', ');
+    const deviceInfo = await getDeviceInfo();
+    
+    const emailData = {
+      _subject: 'CC EMERGENCY ALERT', time: timeStr, location: currentLatLng, latlng: currentLatLng,
+      services: serviceNames, visibility: visibility === 'yes' ? 'Yes (Open/Visible Area)' : (visibility === 'no' ? 'No (Hidden Area)' : 'Not specified'),
+      contact: contact, comment: comment, device: deviceInfo.device, os: deviceInfo.os,
+      timezone: deviceInfo.timezone, ip: deviceInfo.ip, userAgent: deviceInfo.userAgent,
+      'h-captcha-response': captchaToken,
+      message: `ALERT DETAILS\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nTime: ${timeStr}\nLocation: ${currentLatLng}\nServices: ${serviceNames}\nVisible Area: ${visibility === 'yes' ? 'Yes' : (visibility === 'no' ? 'No' : 'Not specified')}\nContact: ${contact}\nComment: ${comment}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nDEVICE INFORMATION\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nDevice: ${deviceInfo.device}\nOS: ${deviceInfo.os}\nIP Address: ${deviceInfo.ip}\nTimezone: ${deviceInfo.timezone}\nUser Agent: ${deviceInfo.userAgent}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nPlease handle this alert immediately.`
+    };
+    const success = await sendEmailAlert(emailData);
+    if (success) { addDispatchCard(); closeModal(); if (typeof hcaptcha !== 'undefined' && reportCaptchaWidgetId !== null) { try { hcaptcha.reset(reportCaptchaWidgetId); } catch(e) {} } }
+  };
+
+  document.addEventListener('mousemove', (e) => {
+    const cursor = document.getElementById('cursor-highlight');
+    if (cursor && cursor.style.display === 'block') {
+      cursor.style.left = e.clientX + 'px';
+      cursor.style.top = e.clientY + 'px';
+    }
+  });
+
+  function toggleCursorAssist(on){ let h=document.getElementById('cursor-highlight'); h.style.display=on?'block':'none'; document.body.style.cursor=on?'none':'default'; updateCursorStyle(); }
+  function updateCursorStyle(){ let sel=document.getElementById('cursor-color-select'); if(sel){ let [bg,border]=sel.value.split('|'); document.documentElement.style.setProperty('--cursor-color', bg); document.documentElement.style.setProperty('--cursor-border', border); } }
+  document.getElementById('cursor-cb').addEventListener('change',e=>toggleCursorAssist(e.target.checked));
+  document.getElementById('cursor-color-select')?.addEventListener('change',updateCursorStyle);
+  function applyFilters(){ let c=document.getElementById('con-range').value,g=document.getElementById('gray-range').value,s=document.getElementById('sat-range').value; document.getElementById('mainFilter').style.filter=`contrast(${c}) grayscale(${g}) saturate(${s})`; }
+  function resetAcc(){ document.getElementById('con-range').value=1; document.getElementById('gray-range').value=0; document.getElementById('sat-range').value=1; document.getElementById('cursor-cb').checked=false; toggleCursorAssist(false); applyFilters(); }
+  function toggleAccPanel(){ document.getElementById('accPanel').classList.toggle('show'); }
+
+  document.getElementById('emergencyBtn').onclick=openModal;
+    let popupMenu=null;
+  
+  function showLangModal() {
+    let modal = document.getElementById('langModal');
+    let grid = document.getElementById('langGrid');
+    let langList = [
+      {code:'en', name:'English (UK)'},{code:'zh-Hans', name:'简体白话'},{code:'es', name:'Español'},{code:'de', name:'Deutsch'},
+      {code:'pt', name:'Português'},{code:'zh-Hant', name:'正體官話'},{code:'fr', name:'Français'},{code:'lzh', name:'简体文言'},
+      {code:'ru', name:'Русский'},{code:'mn', name:'Монгол хэл'},{code:'ja', name:'日本語'},{code:'ko', name:'한국어'},
+      {code:'hi', name:'हिन्दी'},{code:'zh-Classical', name:'華夏文言'}
+    ];
+    grid.innerHTML = '';
+    langList.forEach(l => {
+      let btn = document.createElement('div'); btn.className = 'lang-option'; btn.innerText = l.name;
+      btn.onclick = () => { 
+        currentLang = l.code; 
+        applyLanguage(currentLang); 
+        modal.style.display = 'none'; 
+        localStorage.setItem('cc_lang', currentLang);
+        if (!langSelected) {
+          langSelected = true;
+          TimeCheckModal.startTimer();
+        }
+      };
+      grid.appendChild(btn);
+    });
+    modal.style.display = 'flex';
+  }
+  document.getElementById('langSwitchBtn').onclick=()=>showLangModal();
+
+  function showPrivacyModal() {
+    document.getElementById('privacyModal').style.display = 'flex';
+  }
+  function showLicenseModal() {
+    document.getElementById('licenseModal').style.display = 'flex';
+  }
+  document.getElementById('privacyPolicyBtn').onclick = showPrivacyModal;
+  document.getElementById('licenseBtn').onclick = showLicenseModal;
+  document.getElementById('closePrivacyModal').onclick = () => document.getElementById('privacyModal').style.display = 'none';
+  document.getElementById('closeLicenseModal').onclick = () => document.getElementById('licenseModal').style.display = 'none';
+  
+  // Attach related links click handlers
+  document.querySelectorAll('.related-link').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const url = btn.getAttribute('data-url');
+      if (url) window.open(url, '_blank');
+    });
+  });
+
+  window.onload = function() {
+    initMap();
+    if(!langSelected) showLangModal();
+    TimeCheckModal.init();
+    if (typeof hcaptcha !== 'undefined') {
+      const reportCaptchaElem = document.querySelector('#reportModal .h-captcha');
+      if (reportCaptchaElem) reportCaptchaWidgetId = hcaptcha.render(reportCaptchaElem);
+      const lostCaptchaElem = document.querySelector('#lostCaptcha .h-captcha');
+      if (lostCaptchaElem) lostCaptchaWidgetId = hcaptcha.render(lostCaptchaElem);
+    }
+  };
+  
+  let savedLang = localStorage.getItem('cc_lang');
+  if(savedLang && translations[savedLang]) { currentLang = savedLang; langSelected = true; }
+  applyLanguage(currentLang);
+  initServiceButtons();
+  if (langSelected) TimeCheckModal.startTimer();
+</script>
+</body>
+</html>
